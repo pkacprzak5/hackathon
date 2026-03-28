@@ -1,0 +1,31 @@
+# squat_coach/config/default.yaml
+# General settings for the squat coach system
+
+camera:
+  device_id: 0
+  width: 1280
+  height: 720
+  target_fps: 30
+  min_resolution_w: 640
+  min_resolution_h: 480
+
+preprocessing:
+  ema_alpha: 0.4               # EMA smoothing. Higher = less smoothing.
+  max_dropped_frames: 5         # Hold last landmarks for this many frames
+  calibration_duration_s: 2.0   # Seconds of standing for calibration
+
+device: "auto"                  # "auto" detects MPS/CUDA/CPU
+
+logging:
+  terminal_throttle_hz: 5.0     # Max log lines per second for frame data
+  debug: false
+
+session:
+  log_dir: "sessions"           # Directory for JSONL session logs
+  log_features: false           # Per-frame JSONL feature logging
+
+gemini:
+  enabled: true                  # Set to true to get Gemini coaching feedback
+  api_key: "AQ.Ab8RN6Ies1rGhBpsqB811Ecdd7DLrtcxmxqO8WBAy3Fs0LQWRQ"                    # Paste your Gemini API key here, or set GEMINI_API_KEY env var
+  model: "gemini-2.5-flash"     # Model to use for coaching text generation
+  speak: true                    # Speak Gemini feedback out loud (macOS 'say')
