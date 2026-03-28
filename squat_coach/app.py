@@ -262,8 +262,10 @@ class SquatCoachApp:
                                 prev_phase.value, phase.value,
                                 features.get("primary_knee_angle", 0))
 
-                # Track per-rep extremes
-                if phase in (Phase.DESCENT, Phase.BOTTOM, Phase.ASCENT):
+                # Track per-rep extremes — only during descent and bottom
+                # Ascent form is different (trunk naturally leans forward to stand up)
+                # so we don't penalize for it
+                if phase in (Phase.DESCENT, Phase.BOTTOM):
                     rep_min_knee = min(rep_min_knee, features.get("primary_knee_angle", 180))
                     rep_max_torso = max(rep_max_torso, features.get("torso_inclination_deg", 0))
                     rep_max_head_offset = max(rep_max_head_offset, features.get("head_to_trunk_offset", 0))
