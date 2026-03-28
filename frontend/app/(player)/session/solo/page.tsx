@@ -12,7 +12,8 @@ import type { Insight } from "@/lib/types";
 
 export default function SoloSessionPage() {
   const router = useRouter();
-  const { state, videoRef, renderedImgRef, startSession, endSession } = useSquatSession();
+  const { state, videoRef, renderedCanvasRef, startSession, endSession } = useSquatSession();
+  const containerRef = useRef<HTMLDivElement>(null);
   const [sessionTime, setSessionTime] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -105,8 +106,8 @@ export default function SoloSessionPage() {
       </div>
 
       {/* Video feed */}
-      <div className="relative mx-4 aspect-[3/4] overflow-hidden rounded-xl bg-camera-bg">
-        {/* Live camera — always active for frame capture, hidden behind rendered img */}
+      <div ref={containerRef} className="relative mx-4 aspect-[3/4] overflow-hidden rounded-xl bg-camera-bg">
+        {/* Live camera — always active for frame capture, hidden behind canvas */}
         <video
           ref={videoRef}
           autoPlay
@@ -115,12 +116,18 @@ export default function SoloSessionPage() {
           className="absolute inset-0 h-full w-full object-cover"
         />
 
-        {/* Server-rendered frames (skeleton on video) — overlays on top of live video */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          ref={renderedImgRef}
-          alt=""
-          className={`absolute inset-0 h-full w-full object-cover ${
+        {/* Server-rendered frames drawn center-cropped onto canvas */}
+        <canvas
+          ref={(node) => {
+            (renderedCanvasRef as React.MutableRefObject<HTMLCanvasElement | null>).current = node;
+            // Size canvas to container
+            if (node && containerRef.current) {
+              const rect = containerRef.current.getBoundingClientRect();
+              node.width = rect.width;
+              node.height = rect.height;
+            }
+          }}
+          className={`absolute inset-0 h-full w-full ${
             state.status === "active" ? "z-10" : "hidden"
           }`}
         />

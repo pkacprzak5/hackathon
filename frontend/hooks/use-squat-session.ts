@@ -18,7 +18,7 @@ const JPEG_QUALITY = 0.5;
 
 // Frame buffer — initial fill of 5 frames for jitter protection, then play ASAP
 const BUFFER_FILL_SIZE = 5;
-const PLAYBACK_INTERVAL = 10; // ms, poll fast — plays frames as soon as available
+const PLAYBACK_INTERVAL = 42; // ms, ~24fps playback
 
 export function useSquatSession() {
   const [state, setState] = useState<SquatSessionState>({
@@ -36,12 +36,11 @@ export function useSquatSession() {
   });
 
   const videoRef = useRef<HTMLVideoElement>(null);
-  const renderedImgRef = useRef<HTMLImageElement>(null);
+  const renderedCanvasRef = useRef<HTMLCanvasElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const captureIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const playbackIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const offscreenRef = useRef<HTMLCanvasElement | null>(null);
-  const prevBlobUrl = useRef<string | null>(null);
 
   // Frame buffer: queue of blob URLs waiting to be displayed
   const frameBuffer = useRef<Blob[]>([]);
@@ -115,7 +114,32 @@ export function useSquatSession() {
     }
   }, [handleJsonMessage]);
 
-  // Playback loop — pulls frames from buffer at steady rate
+  // Draw a frame onto the display canvas, center-cropped to fit
+  const drawFrameToCanvas = useCallback((img: HTMLImageElement) => {
+    const canvas = renderedCanvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const cw = canvas.width;
+    const ch = canvas.height;
+    const iw = img.naturalWidth;
+    const ih = img.naturalHeight;
+
+    if (iw === 0 || ih === 0) return;
+
+    // Calculate cover crop (like object-cover but manual)
+    const scale = Math.max(cw / iw, ch / ih);
+    const sw = cw / scale;
+    const sh = ch / scale;
+    const sx = (iw - sw) / 2;
+    const sy = (ih - sh) / 2;
+
+    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, cw, ch);
+  }, []);
+
+  // Playback loop — pulls frames from buffer at steady 42ms rate
   const startPlayback = useCallback(() => {
     if (playbackIntervalRef.current) return;
 
@@ -125,19 +149,15 @@ export function useSquatSession() {
       const blob = frameBuffer.current.shift();
       if (!blob) return;
 
-      const img = renderedImgRef.current;
-      if (!img) return;
-
       const url = URL.createObjectURL(blob);
+      const img = new Image();
       img.onload = () => {
-        if (prevBlobUrl.current) {
-          URL.revokeObjectURL(prevBlobUrl.current);
-        }
-        prevBlobUrl.current = url;
+        drawFrameToCanvas(img);
+        URL.revokeObjectURL(url);
       };
       img.src = url;
     }, PLAYBACK_INTERVAL);
-  }, []);
+  }, [drawFrameToCanvas]);
 
   const startCapture = useCallback(() => {
     const video = videoRef.current;
@@ -255,10 +275,6 @@ export function useSquatSession() {
       tracks.forEach((t) => t.stop());
       videoRef.current.srcObject = null;
     }
-    if (prevBlobUrl.current) {
-      URL.revokeObjectURL(prevBlobUrl.current);
-      prevBlobUrl.current = null;
-    }
     frameBuffer.current = [];
     bufferReady.current = false;
     setState((s) => ({ ...s, status: "ended" }));
@@ -273,14 +289,13 @@ export function useSquatSession() {
         const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
         tracks.forEach((t) => t.stop());
       }
-      if (prevBlobUrl.current) URL.revokeObjectURL(prevBlobUrl.current);
     };
   }, []);
 
   return {
     state,
     videoRef,
-    renderedImgRef,
+    renderedCanvasRef,
     startSession,
     endSession,
   };
