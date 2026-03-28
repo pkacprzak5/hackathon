@@ -107,25 +107,33 @@ export default function SoloSessionPage() {
 
       {/* Video feed */}
       <div ref={containerRef} className="relative mx-4 aspect-[3/4] overflow-hidden rounded-xl bg-camera-bg">
-        {/* Camera feed — always full size (keeps browser rendering frames for capture).
-            Visible during calibration. Canvas covers it when active (z-10). */}
+        {/* Camera feed — full size to keep browser rendering frames for capture.
+            Visible during calibration, hidden once server frames start. */}
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted
-          className="absolute inset-0 h-full w-full object-cover"
+          className={`absolute inset-0 h-full w-full object-cover ${
+            state.status === "active" ? "invisible" : ""
+          }`}
         />
 
-        {/* Server-rendered frames drawn center-cropped onto canvas */}
+        {/* Server-rendered frames drawn center-cropped onto canvas.
+            Black background so camera doesn't show through before first frame. */}
         <canvas
           ref={(node) => {
             (renderedCanvasRef as React.MutableRefObject<HTMLCanvasElement | null>).current = node;
-            // Size canvas to container
             if (node && containerRef.current) {
               const rect = containerRef.current.getBoundingClientRect();
               node.width = rect.width;
               node.height = rect.height;
+              // Fill black immediately so camera doesn't bleed through
+              const ctx = node.getContext("2d");
+              if (ctx) {
+                ctx.fillStyle = "#000";
+                ctx.fillRect(0, 0, node.width, node.height);
+              }
             }
           }}
           className={`absolute inset-0 h-full w-full ${
