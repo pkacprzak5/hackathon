@@ -17,7 +17,7 @@ A real-time squat analysis system that processes live webcam video (or recorded 
 | View support | Side-view primary, front-view supported | ALEX-GYM-1 has both views; 3D world landmarks are partially view-invariant |
 | Output: overlay | Simple skeleton + phase + rep count + score + one cue | Minimal, not a complex UI |
 | Output: terminal | Rich real-time logging of all features, phases, scores, faults | Primary debugging/monitoring interface |
-| Output: Gemini | One structured payload per rep, sent at bottom→ascent transition | Natural coaching moment |
+| Output: Gemini | One structured payload per rep, sent at rep_completed (ascent→top) | Full rep data available for scoring |
 | Config | YAML files | Easy tuning without code edits |
 | Language | Python only | OpenCV, MediaPipe, PyTorch, NumPy |
 
@@ -98,7 +98,52 @@ LIVE CAMERA / VIDEO FILE
 
 ## Data Flow
 
-Frame → MediaPipe (3D landmarks) → View detection (once at calibration) → Smoothing + normalization → Feature extraction (all ~50+ features every frame) → Sequence buffer (rolling window) → Temporal models (TCN + GRU) → Ensemble fusion → Phase detection + Fault detection → Scoring with rationale → Terminal logging (every frame, throttled) + Simple overlay (every frame) + Gemini payload (per rep at ascent).
+Frame → MediaPipe (3D landmarks) → View detection (once at calibration) → Smoothing + normalization → Feature extraction (all ~50+ features every frame) → Sequence buffer (rolling window) → Temporal models (TCN + GRU) → Ensemble fusion → Phase detection + Fault detection → Scoring with rationale → Terminal logging (every frame, throttled) + Simple overlay (every frame) + Gemini payload (per rep at rep_completed).
+
+## Technical Specifications
+
+### Video Requirements
+
+- **Target FPS**: 30 fps
+- **Minimum resolution**: 640×480 (720p preferred)
+- **Camera suitability check** (during calibration): validates resolution ≥ 640×480, stable FPS ≥ 20, landmark detection success rate ≥ 80% over calibration frames, adequate lighting (mean frame brightness > 40)
+
+### Dual-View Semantics
+
+Dual-view means a **single camera** that the user positions in either side or front orientation. **One view per session**, auto-detected at calibration. This is NOT simultaneous dual-camera. The user chooses their camera angle; the system detects which view it is and selects the appropriate feature extraction path and fault set.
+
+### Model Input Tensor Contract
+
+All temporal models receive tensors of shape: **[batch, seq_len, D]** where:
+- `seq_len` = 60 (default, 2 seconds at 30 FPS, configurable in model.yaml)
+- `D` = 42 (engineered feature vector dimension)
+
+**Feature vector layout (D=42), concatenated in this order:**
+
+| Index | Feature | Count |
+|-------|---------|-------|
+| 0-5 | left/right/primary knee angle, left/right/primary hip angle | 6 |
+| 6 | ankle_angle_proxy | 1 |
+| 7-8 | torso_inclination_deg, shoulder_hip_line_angle | 2 |
+| 9-11 | head_to_trunk_offset, shoulder_to_hip_h_delta, shoulder_to_hip_v_delta | 3 |
+| 12-13 | hip_depth_vs_knee, hip_depth_vs_ankle | 2 |
+| 14-15 | nose_to_shoulder_offset, neck_forward_offset | 2 |
+| 16-19 | forward_lean_angle/knee_valgus_angle, rounded_back_risk/stance_width_ratio, trunk_stability/left_right_symmetry, ankle_shin_angle/hip_shift_lateral (view-dependent) | 4 |
+| 20-27 | hip_vert_vel, hip_vert_accel, trunk_ang_vel, trunk_ang_accel, knee_ang_vel, knee_ang_accel, hip_ang_vel, hip_ang_accel | 8 |
+| 28-33 | landmark_visibility_mean, lower_body_visibility, torso_visibility, frame_reliability_score, view_validity_score, occlusion_risk_score | 6 |
+| 34-41 | pairwise_distance_subset (8 key joint pairs: L/R hip-knee, L/R knee-ankle, L/R shoulder-hip, hip_mid-shoulder_mid, nose-shoulder_mid) | 8 |
+
+View-dependent features (indices 16-19): side-view features are used when view=side, front-view features when view=front. The slot positions are the same; the semantics change based on detected view.
+
+### Preprocessing Parameters
+
+- **EMA smoothing alpha**: 0.4 (default, configurable in default.yaml). Higher = less smoothing, lower latency. Lower = more smoothing, more lag.
+- **Dropped frame handling**: Hold last valid landmarks for up to 5 frames. After 5 consecutive drops, mark sequence segment as invalid and suppress scoring/faults. Display "Repositioning needed" on overlay.
+- **No-detection state**: When MediaPipe returns no landmarks, increment drop counter. Reset on successful detection.
+
+### Gemini Payload Trigger
+
+Gemini payload is sent at **`rep_completed`** (ascent→top confirmed), NOT at bottom→ascent. This ensures the full rep data (including ascent quality) is available for scoring. The earlier mention of "bottom→ascent" in the Key Decisions table is corrected here — all scoring and Gemini dispatch happens at rep completion.
 
 ## Training Pipeline
 
@@ -108,13 +153,31 @@ Frame → MediaPipe (3D landmarks) → View detection (once at calibration) → 
 - 295 squat videos with lateral + frontal pose keypoints (33 landmarks × 3D per frame)
 - Per-criteria quality ratings in squat.xlsx
 - Auto-label phases from hip vertical trajectory (descent = hip dropping, bottom = local min, ascent = hip rising, top = local max)
-- Map Excel criteria columns → fault labels
+- Map Excel criteria columns → fault labels (see label mapping below)
 
 **Zenodo Squat Dataset (supplementary)**
 - Side-view squat images, ~824 MB
 - Labels: Good / Bad_Back / Bad_Heel
 - Run MediaPipe on images → extract landmarks → compute features
 - Map to per-frame fault supervision (Good→no_fault, Bad_Back→rounded_back, Bad_Heel→heel_fault)
+- **Usage in temporal training**: Zenodo provides single images, not sequences. These are used ONLY for per-frame fault classification pre-training. They are NOT assembled into pseudo-sequences. The per-frame fault head can be pre-trained on Zenodo, then fine-tuned jointly with temporal training on ALEX-GYM-1 sequences.
+
+### ALEX-GYM-1 Label Mapping
+
+The squat.xlsx file contains per-criteria rating columns ending in "F" (frontal) and "L" (lateral). Mapping to our fault labels:
+
+| Excel Column Pattern | Our Fault Label | Binarization |
+|---------------------|-----------------|--------------|
+| Depth-related columns (L) | insufficient_depth | score < 0.5 → fault present |
+| Back/spine columns (L) | rounded_back_risk | score < 0.5 → fault present |
+| Forward lean columns (L) | excessive_forward_lean | score < 0.5 → fault present |
+| Heel/foot columns (L) | heel_fault | score < 0.5 → fault present |
+| Stability columns (L/F) | unstable_torso | score < 0.5 → fault present |
+| "class" column | overall quality | 0=good, 1+=has errors |
+
+Exact column name discovery happens during data pipeline preprocessing (columns vary per dataset version). The pipeline logs the discovered mapping for verification. Lateral ("L") columns are preferred for side-view training; frontal ("F") columns for front-view.
+
+For faults not covered by ALEX-GYM-1 labels (inconsistent_tempo, poor_trunk_control), synthetic augmentation provides labeled training data.
 
 **Synthetic Augmentation (gap-filling)**
 - Generate smooth squat trajectories (sinusoidal hip path + joint angle curves)
@@ -141,7 +204,8 @@ All models share the same feature tensors, train/val/test splits (70/15/15), and
 - `phase_probs`: [top, descent, bottom, ascent] — softmax
 - `fault_probs`: [depth, forward_lean, rounded_back, heel_fault, unstable_torso, tempo] — sigmoid per fault
 - `quality_score`: scalar [0-1] — regression
-- `confidence`: scalar [0-1] — regression
+
+Note: `confidence` is NOT a model output head. It is computed post-hoc from: (a) ensemble disagreement between models, (b) mean landmark visibility of the input window, (c) phase probability entropy. This avoids the need for confidence ground truth labels.
 
 **Models trained:**
 1. TCN (production) — causal temporal convolutions
@@ -149,11 +213,26 @@ All models share the same feature tensors, train/val/test splits (70/15/15), and
 3. BiLSTM (optional) — bidirectional LSTM
 4. Transformer (optional) — encoder-only with positional encoding
 
+**Loss function:**
+- Phase head: cross-entropy loss (4-class classification)
+- Fault head: binary cross-entropy loss (per-fault sigmoid, multi-label)
+- Quality head: MSE loss (regression to [0-1])
+- **Combined loss**: `L = 1.0 * L_phase + 1.0 * L_fault + 0.5 * L_quality`
+- Weights configurable in model.yaml. Phase and fault are equally weighted as primary tasks; quality is secondary.
+
 **Training config:**
 - Device: MPS primary, CPU fallback
-- Early stopping on validation loss
+- Early stopping on validation loss (patience=10 epochs)
 - ~20-50 epochs target
 - Moderate model sizes to keep inference fast
+- Train/val/test split: 70/15/15, **video-level splitting** (all frames from one video go to the same split, no data leakage). Stratified by fault distribution.
+
+### Model Checkpointing
+
+- Checkpoints saved to: `squat_coach/models/checkpoints/{model_type}_{timestamp}.pt`
+- Best model (lowest val loss) symlinked as: `squat_coach/models/checkpoints/{model_type}_best.pt`
+- Ensemble config in model.yaml references checkpoint paths
+- At inference, `inference_manager.py` loads `*_best.pt` for each enabled model
 
 **Ensemble calibration:**
 - After all models trained, calibrate ensemble weights on validation set
@@ -347,8 +426,10 @@ class FaultDetection:
 | trunk_control_score | torso angle variance, max forward lean vs baseline |
 | posture_stability_score | rounded_back_risk, head drift, trunk collapse at bottom |
 | movement_consistency_score | velocity smoothness, phase timing symmetry, jerk |
-| rep_quality_score | weighted combination of above 4 |
+| rep_quality_score | weighted combination of above 4 + model quality_score output (scaled ×100, weight 0.2) |
 | overall_form_score | EMA of rep_quality_scores across session |
+
+The model's `quality_score` output [0-1] contributes as one input (weight 0.2) to the `rep_quality_score`. The scoring engine's own decomposed scores (depth, trunk, posture, consistency) contribute the remaining 0.8. This way the model's learned quality estimate informs but does not dominate the explainable scoring pipeline.
 
 ### Rationale Object (per rep)
 
@@ -391,8 +472,10 @@ Selects the single most important cue for overlay and Gemini.
 
 **Priority ranking:** severity × confidence × persistence × (1 / recency)
 
+Where `recency` = seconds since this fault type was last displayed as a coaching cue. A fault shown 2 seconds ago has recency=2, so its priority is halved compared to one shown 4 seconds ago. Minimum recency clamped to 1.0 to avoid division by zero.
+
 - Only one cue displayed at a time on overlay
-- Suppress cues shown in last N seconds (configurable)
+- Suppress cues shown in last N seconds (configurable, default=5s)
 - Suppress low-confidence faults
 - Prioritize novel faults over repeated ones
 - Gemini payload includes top-3 ranked cues with full rationale
@@ -424,13 +507,13 @@ Selects the single most important cue for overlay and Gemini.
 - Current score bottom-left (e.g. "Score: 72")
 - One coaching cue bottom-center (e.g. "Keep chest up")
 
-### Gemini Payload (per rep, at bottom→ascent transition)
+### Gemini Payload (per rep, at rep_completed)
 
 Structured semantic summary with all scores, faults, rationale, trend, and prioritized coaching cue. Formatted for natural language generation, not raw numbers.
 
 ### JSONL Session Log
 
-One JSON line per rep summary, written to timestamped session file. For replay analysis and debugging.
+One JSON line per rep summary, written to `sessions/{YYYY-MM-DD_HH-MM-SS}.jsonl` (path configurable in default.yaml). For replay analysis and debugging.
 
 ## Event System
 
@@ -488,7 +571,7 @@ squat_coach/
     temporal_gru.py               # GRU implementation
     temporal_bilstm.py            # BiLSTM implementation
     temporal_transformer.py       # Transformer encoder implementation
-    temporal_stgcn_scaffold.py    # ST-GCN scaffold for future expansion
+    temporal_stgcn_scaffold.py    # ST-GCN scaffold (extension point only, not trained or used in production)
     ensemble_fusion.py            # confidence-weighted ensemble fusion
     feature_tensor_builder.py     # build model input tensors from features
     inference_manager.py          # manage multi-model inference
