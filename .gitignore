@@ -1,0 +1,3 @@
+*.task
+sessions/
+squat_coach/models/checkpoints/
