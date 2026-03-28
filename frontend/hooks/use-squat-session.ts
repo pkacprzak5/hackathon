@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { parseLandmarks } from "@/lib/interpolation";
 import type {
   SquatPhase,
   SquatRepResult,
@@ -32,13 +31,13 @@ export function useSquatSession() {
   });
 
   const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const renderedRef = useRef<HTMLImageElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const captureIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const offscreenRef = useRef<HTMLCanvasElement | null>(null);
 
-  const handleMessage = useCallback((event: MessageEvent) => {
-    const msg: ServerMessage = JSON.parse(event.data);
+  const handleJsonMessage = useCallback((data: string) => {
+    const msg: ServerMessage = JSON.parse(data);
 
     switch (msg.type) {
       case "calibration":
@@ -50,18 +49,15 @@ export function useSquatSession() {
         break;
 
       case "frame": {
-        const data = msg.data;
+        const d = msg.data;
         setState((s) => {
           const next = { ...s };
-          if (data.phase) next.phase = data.phase as SquatPhase;
-          if (data.knee_angle !== undefined) next.angles = { ...next.angles, knee: data.knee_angle };
-          if (data.hip_angle !== undefined) next.angles = { ...next.angles, hip: data.hip_angle };
-          if (data.torso_angle !== undefined) next.angles = { ...next.angles, torso: data.torso_angle };
-          if (data.score !== undefined) next.score = data.score;
-          if (data.confidence !== undefined) next.confidence = data.confidence;
-          if (data.landmarks) {
-            next.landmarks = parseLandmarks(data.landmarks);
-          }
+          if (d.phase) next.phase = d.phase as SquatPhase;
+          if (d.knee_angle !== undefined) next.angles = { ...next.angles, knee: d.knee_angle };
+          if (d.hip_angle !== undefined) next.angles = { ...next.angles, hip: d.hip_angle };
+          if (d.torso_angle !== undefined) next.angles = { ...next.angles, torso: d.torso_angle };
+          if (d.score !== undefined) next.score = d.score;
+          if (d.confidence !== undefined) next.confidence = d.confidence;
           return next;
         });
         break;
@@ -88,6 +84,27 @@ export function useSquatSession() {
         break;
     }
   }, []);
+
+  const handleBinaryFrame = useCallback((data: Blob) => {
+    // Display the server-rendered frame (with skeleton overlay) in the <img>
+    const img = renderedRef.current;
+    if (!img) return;
+    const url = URL.createObjectURL(data);
+    const prev = img.src;
+    img.src = url;
+    // Revoke the previous blob URL to avoid memory leak
+    if (prev && prev.startsWith("blob:")) {
+      URL.revokeObjectURL(prev);
+    }
+  }, []);
+
+  const handleMessage = useCallback((event: MessageEvent) => {
+    if (event.data instanceof Blob) {
+      handleBinaryFrame(event.data);
+    } else {
+      handleJsonMessage(event.data);
+    }
+  }, [handleBinaryFrame, handleJsonMessage]);
 
   const startCapture = useCallback(() => {
     const video = videoRef.current;
@@ -119,7 +136,6 @@ export function useSquatSession() {
   const startSession = useCallback(async () => {
     setState((s) => ({ ...s, status: "connecting" }));
 
-    // Request camera — requires HTTPS on non-localhost (use run.sh which starts HTTPS)
     try {
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error(
@@ -144,9 +160,9 @@ export function useSquatSession() {
       return;
     }
 
-    // Connect WebSocket
     const wsUrl = process.env.NEXT_PUBLIC_ANALYSIS_WS_URL || "ws://localhost:8000/ws/session";
     const ws = new WebSocket(wsUrl);
+    ws.binaryType = "blob"; // receive binary frames as Blob
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -200,7 +216,7 @@ export function useSquatSession() {
   return {
     state,
     videoRef,
-    canvasRef,
+    renderedRef,
     startSession,
     endSession,
   };

@@ -5,8 +5,6 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { CalibrationOverlay } from "@/components/session/calibration-overlay";
-import { OverlayCanvas } from "@/components/session/overlay-canvas";
-import { SessionHud } from "@/components/session/session-hud";
 import { InsightCard } from "@/components/ui/insight-card";
 import { StatBlock } from "@/components/ui/stat-block";
 import { useSquatSession } from "@/hooks/use-squat-session";
@@ -14,9 +12,7 @@ import type { Insight } from "@/lib/types";
 
 export default function SoloSessionPage() {
   const router = useRouter();
-  const { state, videoRef, canvasRef, startSession, endSession } = useSquatSession();
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+  const { state, videoRef, renderedRef, startSession, endSession } = useSquatSession();
   const [sessionTime, setSessionTime] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -36,27 +32,8 @@ export default function SoloSessionPage() {
     };
   }, [state.status]);
 
-  // Track container dimensions for canvas sizing
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (entry) {
-        setDimensions({
-          width: entry.contentRect.width,
-          height: entry.contentRect.height,
-        });
-      }
-    });
-    observer.observe(container);
-    return () => observer.disconnect();
-  }, []);
-
   const handleEnd = () => {
     endSession();
-    // Store session data for results page
     if (typeof window !== "undefined") {
       sessionStorage.setItem("squat_results", JSON.stringify({
         reps: state.reps,
@@ -127,40 +104,29 @@ export default function SoloSessionPage() {
         </button>
       </div>
 
-      {/* Video + overlay container */}
-      <div ref={containerRef} className="relative mx-4 aspect-[3/4] overflow-hidden rounded-xl bg-camera-bg">
+      {/* Video feed */}
+      <div className="relative mx-4 aspect-[3/4] overflow-hidden rounded-xl bg-camera-bg">
+        {/* Hidden video element — only used to capture frames for the server */}
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted
-          className="h-full w-full object-cover"
+          className={state.status === "active" ? "hidden" : "h-full w-full object-cover"}
         />
 
-        {/* Canvas overlay for skeleton */}
-        {state.status === "active" && dimensions.width > 0 && (
-          <OverlayCanvas
-            canvasRef={canvasRef}
-            landmarks={state.landmarks}
-            angles={state.angles}
-            width={dimensions.width}
-            height={dimensions.height}
+        {/* Server-rendered frame with skeleton overlay */}
+        {state.status === "active" && (
+          <img
+            ref={renderedRef}
+            alt=""
+            className="h-full w-full object-cover"
           />
         )}
 
         {/* Calibration overlay */}
         {state.status === "calibrating" && (
           <CalibrationOverlay progress={state.calibrationProgress} />
-        )}
-
-        {/* Session HUD */}
-        {state.status === "active" && (
-          <SessionHud
-            phase={state.phase}
-            repCount={state.repCount}
-            score={state.score}
-            coachingText={state.coachingText}
-          />
         )}
 
         {/* Idle state: start button */}
@@ -173,7 +139,6 @@ export default function SoloSessionPage() {
               <Play className="h-4 w-4" />
               Start Session
             </button>
-            {/* Show error message if camera failed */}
             {state.coachingText && (
               <p className="mx-8 rounded-lg bg-error/20 px-4 py-2 text-center text-xs text-error">
                 {state.coachingText}
@@ -194,7 +159,7 @@ export default function SoloSessionPage() {
         <StatBlock label="Time" value={timeStr} />
       </div>
 
-      {/* Joint Angles — like the OpenCV overlay data */}
+      {/* Joint Angles */}
       {state.status === "active" && (
         <div className="flex items-center gap-3 px-4 py-2">
           <div className="flex flex-1 items-center justify-between rounded-lg bg-bg-surface px-3 py-2">

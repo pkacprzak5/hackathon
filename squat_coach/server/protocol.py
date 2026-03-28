@@ -47,6 +47,9 @@ class FrameResult:
     # Coaching (from Gemini, async)
     coaching_text: str | None = None
 
+    # Rendered frame with overlay (JPEG bytes)
+    rendered_jpeg: bytes | None = None
+
     def to_dict(self) -> dict:
         """Return dict with only non-None fields."""
         d: dict = {"seq": self.seq}

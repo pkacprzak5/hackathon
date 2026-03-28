@@ -1,10 +1,11 @@
-"""Headless squat analysis pipeline — no camera, no display."""
+"""Squat analysis pipeline — processes frames, renders overlay, returns annotated JPEG."""
 import logging
 import os
 import threading
 import time
 from pathlib import Path
 
+import cv2
 import numpy as np
 import yaml
 
@@ -32,6 +33,7 @@ from squat_coach.events.gemini_payloads import (
     format_gemini_payload, send_to_gemini_async, _get_client,
 )
 from squat_coach.events.coaching_priority import CoachingPrioritizer
+from squat_coach.rendering.draw_pose import draw_skeleton
 from squat_coach.session.session_state import SessionState
 from squat_coach.server.protocol import FrameResult, RepData, CalibrationMessage
 
@@ -195,22 +197,24 @@ class SquatCoachPipeline:
         else:
             self._session.current_cue = ""
 
-        landmarks_list = [
-            [round(float(lm[0]), 4), round(float(lm[1]), 4),
-             round(float(lm[2]), 4), round(float(pose_result.visibility[i]), 2)]
-            for i, lm in enumerate(pose_result.image_landmarks)
-        ]
+        # Render only skeleton on the frame (UI handles metrics/text)
+        annotated = frame.copy()
+        draw_skeleton(annotated, pose_result.image_landmarks, pose_result.visibility)
+
+        # Encode annotated frame as JPEG
+        _, jpeg_buf = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 75])
+        rendered_jpeg = jpeg_buf.tobytes()
 
         result = FrameResult(
             seq=seq,
             timestamp=timestamp,
-            landmarks=landmarks_list,
             phase=phase.value.upper(),
             knee_angle=features.get("primary_knee_angle"),
             hip_angle=features.get("primary_hip_angle"),
             torso_angle=features.get("torso_inclination_deg"),
             score=self._session.current_score,
             confidence=pose_result.pose_confidence,
+            rendered_jpeg=rendered_jpeg,
         )
 
         rep_result = self._rep_segmenter.update(phase, timestamp)

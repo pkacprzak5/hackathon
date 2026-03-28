@@ -14,7 +14,14 @@ logger = logging.getLogger("squat_coach.ws")
 
 
 async def session_handler(websocket: WebSocket) -> None:
-    """Handle one client session over WebSocket."""
+    """Handle one client session over WebSocket.
+
+    Protocol:
+    - Client sends: binary JPEG frames
+    - Server sends: binary JPEG (rendered frame with overlay) + JSON text (data)
+      Binary messages = rendered frames for display
+      Text messages = JSON data (calibration, frame data, rep events, coaching)
+    """
     await websocket.accept()
     logger.info("Client connected")
 
@@ -33,13 +40,20 @@ async def session_handler(websocket: WebSocket) -> None:
             timestamp = time.time()
             result = pipeline.process_frame(frame, timestamp)
 
+            # Calibration phase — only JSON, no rendered frame yet
             if result.calibration is not None:
                 await websocket.send_json(result.calibration.to_dict())
                 continue
 
+            # Send rendered frame with overlay as binary
+            if result.rendered_jpeg is not None:
+                await websocket.send_bytes(result.rendered_jpeg)
+
+            # Send frame data as JSON (for stats display)
             compressed = delta.compress(result)
             await websocket.send_json({"type": "frame", "data": compressed})
 
+            # Rep event
             if result.rep is not None:
                 await websocket.send_json({
                     "type": "rep",
@@ -49,6 +63,7 @@ async def session_handler(websocket: WebSocket) -> None:
                     "coaching_text": result.rep.coaching_text,
                 })
 
+            # Gemini coaching text
             if result.coaching_text is not None:
                 await websocket.send_json({
                     "type": "coaching",
