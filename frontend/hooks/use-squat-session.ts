@@ -17,7 +17,7 @@ const CAPTURE_HEIGHT = 640;
 const JPEG_QUALITY = 0.5;
 
 // Frame buffer — 8 frames initial fill to avoid underruns
-const BUFFER_FILL_SIZE = 8;
+const BUFFER_FILL_SIZE = 4;
 const PLAYBACK_INTERVAL = 40; // ms, 25fps playback
 
 export function useSquatSession() {
