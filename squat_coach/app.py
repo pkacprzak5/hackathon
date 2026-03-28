@@ -359,7 +359,8 @@ class SquatCoachApp:
                     if gemini_cfg.get("enabled", False):
                         gemini_key = gemini_cfg.get("api_key", "")
                         gemini_model = gemini_cfg.get("model", "gemini-2.0-flash")
-                        feedback = send_to_gemini(gemini, api_key=gemini_key, model=gemini_model)
+                        speak_on = gemini_cfg.get("speak", True)
+                        feedback = send_to_gemini(gemini, api_key=gemini_key, model=gemini_model, speak_enabled=speak_on)
                         if feedback:
                             logger.info("🤖 GEMINI: %s", feedback)
                             # Show Gemini feedback as the coaching cue

@@ -26,5 +26,6 @@ session:
 
 gemini:
   enabled: true                  # Set to true to get Gemini coaching feedback
-  api_key: ""                    # Paste your Gemini API key here, or set GEMINI_API_KEY env var
-  model: "gemini-2.0-flash"     # Model to use for coaching text generation
+  api_key: "AQ.Ab8RN6Ies1rGhBpsqB811Ecdd7DLrtcxmxqO8WBAy3Fs0LQWRQ"                    # Paste your Gemini API key here, or set GEMINI_API_KEY env var
+  model: "gemini-2.5-flash"     # Model to use for coaching text generation
+  speak: true                    # Speak Gemini feedback out loud (macOS 'say')

@@ -11,11 +11,39 @@ Setup:
 """
 import logging
 import os
+import subprocess
+import threading
 from typing import Optional
 
 from squat_coach.events.schemas import RepSummaryEvent
 
 logger = logging.getLogger("squat_coach.gemini")
+
+# Background TTS so it doesn't block the video loop
+_tts_lock = threading.Lock()
+
+
+def speak(text: str) -> None:
+    """Speak text using macOS 'say' command in a background thread.
+
+    Non-blocking — runs in a separate thread so the video loop isn't paused.
+    Only one utterance at a time (new speech cancels previous).
+    """
+    def _run():
+        with _tts_lock:
+            try:
+                # Kill any previous say process
+                subprocess.run(["killall", "say"], capture_output=True)
+                subprocess.run(
+                    ["say", "-r", "180", text],  # rate 180 words/min (slightly fast)
+                    capture_output=True,
+                    timeout=15,
+                )
+            except Exception as e:
+                logger.debug("TTS error: %s", e)
+
+    thread = threading.Thread(target=_run, daemon=True)
+    thread.start()
 
 # Lazy-initialized client
 _client = None
@@ -85,6 +113,7 @@ def send_to_gemini(
     payload: dict,
     api_key: str = "",
     model: str = "gemini-2.0-flash",
+    speak_enabled: bool = True,
 ) -> Optional[str]:
     """Send rep summary to Gemini and get coaching feedback.
 
@@ -113,6 +142,8 @@ def send_to_gemini(
         )
         feedback = response.text.strip()
         logger.info("Gemini feedback: %s", feedback)
+        if speak_enabled:
+            speak(feedback)
         return feedback
     except Exception as e:
         logger.error("Gemini API error: %s", e)
