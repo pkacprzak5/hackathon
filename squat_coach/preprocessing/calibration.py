@@ -50,6 +50,16 @@ class Calibrator:
             self._frames.append(pose.world_landmarks.copy())
 
     @property
+    def frame_count(self) -> int:
+        """Number of frames collected so far."""
+        return len(self._frames)
+
+    @property
+    def num_frames(self) -> int:
+        """Total frames required for calibration."""
+        return self._num_frames
+
+    @property
     def is_ready(self) -> bool:
         return len(self._frames) >= self._num_frames
 
