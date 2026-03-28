@@ -106,19 +106,18 @@ export default function SoloSessionPage() {
 
       {/* Video display */}
       <div className="relative mx-4 aspect-[3/4] overflow-hidden rounded-xl bg-black">
-        {/* Camera feed — visible during calibration, invisible when active */}
+        {/* Camera feed — always visible and rendering (required for frame capture).
+            The <img> covers it via z-10 when server frames arrive. */}
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted
-          className={`absolute inset-0 h-full w-full object-cover ${
-            state.status === "active" ? "invisible" : ""
-          }`}
+          className="absolute inset-0 h-full w-full object-cover"
         />
 
-        {/* Server-rendered frames — base64 JPEG via data URI, CSS scales to fit */}
-        {frameSrc && state.status === "active" && (
+        {/* Server-rendered frames — base64 JPEG via data URI, covers video via z-10 */}
+        {frameSrc && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={frameSrc}

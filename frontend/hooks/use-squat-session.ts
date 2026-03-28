@@ -114,6 +114,7 @@ export function useSquatSession() {
       // Mark buffer ready after initial fill
       if (!bufferReady.current && framesReceived.current >= BUFFER_FILL_COUNT) {
         bufferReady.current = true;
+        console.log("Buffer ready, starting playback after", framesReceived.current, "frames");
       }
     }
   }, []);
@@ -122,15 +123,19 @@ export function useSquatSession() {
   const startPlayback = useCallback(() => {
     if (playbackIntervalRef.current) return;
 
+    let displayedCount = 0;
     playbackIntervalRef.current = setInterval(() => {
       if (!bufferReady.current) return;
 
       const frame = frameBuffer.current[readIndex.current];
       if (frame) {
         setFrameSrc(`data:image/jpeg;base64,${frame}`);
-        // Clear slot after reading (optional, helps GC)
         frameBuffer.current[readIndex.current] = null;
         readIndex.current = (readIndex.current + 1) % BUFFER_SIZE;
+        displayedCount++;
+        if (displayedCount % 25 === 1) {
+          console.log("Displayed", displayedCount, "frames, buffer write:", writeIndex.current, "read:", readIndex.current);
+        }
       }
     }, PLAYBACK_INTERVAL);
   }, []);
