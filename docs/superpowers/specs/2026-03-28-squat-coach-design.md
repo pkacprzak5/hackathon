@@ -47,7 +47,8 @@ LIVE CAMERA / VIDEO FILE
 └────────┬────────┘
          ▼
 ┌─────────────────────────────────────────────┐
-│ Feature Extraction (per-frame, ~50+ feats)   │
+│ Feature Extraction (per-frame, ~50+ feats)    │
+│ (D=42 → models; rest → rules/scoring/logging)│
 │  A. Core geometry (18+)                      │
 │  B. Kinematics (8+)                          │
 │  C. Skeleton structure                       │
@@ -133,7 +134,11 @@ All temporal models receive tensors of shape: **[batch, seq_len, D]** where:
 | 28-33 | landmark_visibility_mean, lower_body_visibility, torso_visibility, frame_reliability_score, view_validity_score, occlusion_risk_score | 6 |
 | 34-41 | pairwise_distance_subset (8 key joint pairs: L/R hip-knee, L/R knee-ankle, L/R shoulder-hip, hip_mid-shoulder_mid, nose-shoulder_mid) | 8 |
 
-View-dependent features (indices 16-19): side-view features are used when view=side, front-view features when view=front. The slot positions are the same; the semantics change based on detected view.
+View-dependent features (indices 16-19): side-view features are used when view=side, front-view features when view=front. The slot positions are the same; the semantics change based on detected view. **Separate model weights are trained per view** — `{model_type}_side_best.pt` and `{model_type}_front_best.pt`. The inference manager loads the correct checkpoint based on the calibrated view. This avoids ambiguity in view-dependent slot interpretation.
+
+**D=42 is the model input subset.** The full feature extraction pipeline computes ~50+ features per frame (including bone vectors, joint velocities, full normalized landmarks, etc.). Features beyond D=42 are used by the rule-based scoring engine, fault evidence engine, and terminal logging — they do NOT feed the temporal models.
+
+**Input normalization**: All D=42 features are z-score standardized using per-feature mean and standard deviation computed on the training set. These statistics are saved alongside model checkpoints and applied identically at inference time. This handles the mixed-scale nature of the features (degrees, meters, ratios, velocities).
 
 ### Preprocessing Parameters
 
@@ -238,6 +243,7 @@ Note: `confidence` is NOT a model output head. It is computed post-hoc from: (a)
 - After all models trained, calibrate ensemble weights on validation set
 - Default: TCN + GRU with confidence-weighted fusion
 - Per-head fusion (phase weights may differ from fault weights)
+- Calibration procedure: grid search over weight combinations [0.0, 0.25, 0.5, 0.75, 1.0] per model per head, selecting the combination that minimizes validation loss. Fast since only 2 production models.
 
 ### Best 2 Models for Production
 
