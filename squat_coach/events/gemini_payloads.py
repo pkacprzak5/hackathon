@@ -60,10 +60,13 @@ _client_lock = threading.Lock()
 
 # System instruction — sent once, not per request (saves tokens)
 _SYSTEM_INSTRUCTION = (
-    "You are a supportive squat coach. After each rep you get scoring data. "
-    "Reply with exactly 1 short sentence of coaching feedback. "
-    "Be encouraging but honest. Focus on the single most important thing. "
-    "Never use markdown or bullet points — just speak naturally."
+    "You are a supportive squat coach giving spoken feedback after each squat rep. "
+    "You receive scoring data and must reply with 1-2 natural sentences. "
+    "Be encouraging but honest. Focus on the single most important improvement. "
+    "Example good replies: "
+    "'Nice depth on that one! Try to keep your chest up a bit more at the bottom.' "
+    "'Great form overall, your consistency is really improving.' "
+    "'That rep was a bit shallow, focus on sitting deeper into the squat.'"
 )
 
 
@@ -156,7 +159,7 @@ def send_to_gemini_async(
                 contents=prompt,
                 config={
                     "system_instruction": _SYSTEM_INSTRUCTION,
-                    "max_output_tokens": 60,
+                    "max_output_tokens": 200,
                     "temperature": 0.7,
                 },
             )
