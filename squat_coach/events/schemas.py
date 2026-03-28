@@ -7,8 +7,8 @@ from squat_coach.utils.enums import Phase, FaultType
 @dataclass
 class SquatEvent:
     """Base event type."""
-    event_type: str
-    timestamp: float
+    event_type: str = ""
+    timestamp: float = 0.0
     data: dict[str, Any] = field(default_factory=dict)
 
 
