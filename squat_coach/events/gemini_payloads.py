@@ -101,21 +101,29 @@ def format_gemini_payload(event: RepSummaryEvent) -> dict:
 
 
 def _build_prompt(payload: dict) -> str:
-    """Build a minimal prompt from the payload. Kept short for speed."""
+    """Build prompt with scores, faults, and the system's coaching suggestion."""
     s = payload["scores"]
-    parts = [f"Rep {payload['rep_index']}: {s.get('rep_quality', 50):.0f}/100"]
-    parts.append(f"depth={s.get('depth', 50):.0f} trunk={s.get('trunk_control', 50):.0f} "
-                 f"posture={s.get('posture_stability', 50):.0f} consistency={s.get('movement_consistency', 50):.0f}")
+    lines = [f"Rep {payload['rep_index']} scores:"]
+    lines.append(f"  Overall: {s.get('rep_quality', 50):.0f}/100")
+    lines.append(f"  Depth: {s.get('depth', 50):.0f}  Trunk: {s.get('trunk_control', 50):.0f}  "
+                 f"Posture: {s.get('posture_stability', 50):.0f}  Consistency: {s.get('movement_consistency', 50):.0f}")
 
     if payload["faults"]:
-        fault_strs = [f"{f['type'].replace('_', ' ')} ({f['severity']:.0%})" for f in payload["faults"][:2]]
-        parts.append("faults: " + ", ".join(fault_strs))
+        fault_strs = [f"{f['type'].replace('_', ' ')} ({f['severity']:.0%})" for f in payload["faults"][:3]]
+        lines.append("Faults: " + ", ".join(fault_strs))
+    else:
+        lines.append("No significant faults detected.")
 
     d = payload.get("phase_durations", {})
     if d:
-        parts.append(f"descent={d.get('descent_s', 0):.1f}s ascent={d.get('ascent_s', 0):.1f}s")
+        lines.append(f"Timing: descent {d.get('descent_s', 0):.1f}s, ascent {d.get('ascent_s', 0):.1f}s")
 
-    return " | ".join(parts)
+    # Include the system's coaching suggestion so Gemini can rephrase it naturally
+    cue = payload.get("primary_coaching_cue", "")
+    if cue:
+        lines.append(f"System coaching suggestion: {cue}")
+
+    return "\n".join(lines)
 
 
 # ── Async Gemini call ───────────────────────────────────────────────────
@@ -153,8 +161,7 @@ def send_to_gemini_async(
 
         prompt = _build_prompt(payload)
         try:
-            # Use streaming for faster first-token
-            response = client.models.generate_content_stream(
+            response = client.models.generate_content(
                 model=model,
                 contents=prompt,
                 config={
@@ -164,13 +171,7 @@ def send_to_gemini_async(
                 },
             )
 
-            # Collect streamed chunks
-            chunks = []
-            for chunk in response:
-                if chunk.text:
-                    chunks.append(chunk.text)
-
-            feedback = "".join(chunks).strip()
+            feedback = response.text.strip() if response.text else ""
             if not feedback:
                 return
 
