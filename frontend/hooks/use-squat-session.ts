@@ -176,7 +176,13 @@ export function useSquatSession() {
     };
     ws.onerror = () => {
       ws.close();
-      setState((s) => ({ ...s, status: "idle" }));
+      setState((s) => ({
+        ...s,
+        status: "idle",
+        coachingText: `Cannot connect to analysis server at ${wsUrl}. ` +
+          "If using HTTPS, make sure you've accepted the certificate for the backend URL first " +
+          "(open it in a browser tab and accept the warning).",
+      }));
     };
   }, [handleMessage, startCapture]);
 

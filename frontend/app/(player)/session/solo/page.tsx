@@ -194,6 +194,36 @@ export default function SoloSessionPage() {
         <StatBlock label="Time" value={timeStr} />
       </div>
 
+      {/* Joint Angles — like the OpenCV overlay data */}
+      {state.status === "active" && (
+        <div className="flex items-center gap-3 px-4 py-2">
+          <div className="flex flex-1 items-center justify-between rounded-lg bg-bg-surface px-3 py-2">
+            <span className="text-[10px] text-text-muted">Knee</span>
+            <span className="text-sm font-bold text-text-primary">
+              {state.angles.knee > 0 ? `${Math.round(state.angles.knee)}°` : "—"}
+            </span>
+          </div>
+          <div className="flex flex-1 items-center justify-between rounded-lg bg-bg-surface px-3 py-2">
+            <span className="text-[10px] text-text-muted">Hip</span>
+            <span className="text-sm font-bold text-text-primary">
+              {state.angles.hip > 0 ? `${Math.round(state.angles.hip)}°` : "—"}
+            </span>
+          </div>
+          <div className="flex flex-1 items-center justify-between rounded-lg bg-bg-surface px-3 py-2">
+            <span className="text-[10px] text-text-muted">Torso</span>
+            <span className="text-sm font-bold text-text-primary">
+              {state.angles.torso > 0 ? `${Math.round(state.angles.torso)}°` : "—"}
+            </span>
+          </div>
+          <div className="flex flex-1 items-center justify-between rounded-lg bg-bg-surface px-3 py-2">
+            <span className="text-[10px] text-text-muted">Conf</span>
+            <span className={`text-sm font-bold ${state.confidence > 0.7 ? "text-success" : state.confidence > 0.4 ? "text-warning" : "text-error"}`}>
+              {state.confidence > 0 ? `${Math.round(state.confidence * 100)}%` : "—"}
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* AI Feedback */}
       <div className="flex-1 overflow-y-auto px-4 pb-4">
         <h3 className="mb-2 text-sm font-bold text-text-primary">AI Feedback</h3>
