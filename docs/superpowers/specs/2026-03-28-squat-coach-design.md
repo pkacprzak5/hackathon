@@ -11,7 +11,7 @@ A real-time squat analysis system that processes live webcam video (or recorded 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
 | Pose backend | MediaPipe Pose Landmarker, BlazePose 3D world landmarks | Explicit requirement; 33 joints × 3D in body-centered meters |
-| Temporal models | TCN + GRU (production ensemble) | Lowest inference latency; BiLSTM + Transformer available but off by default |
+| Temporal models | TCN + GRU (production ensemble) | Lowest inference latency |
 | Training device | MPS (Apple Silicon) | User is on Mac; CPU fallback |
 | Training data | ALEX-GYM-1 (primary) + Zenodo squat (supplementary) + synthetic augmentation | Best squat coverage; lateral + frontal poses; per-criteria labels |
 | View support | Side-view primary, front-view supported | ALEX-GYM-1 has both views; 3D world landmarks are partially view-invariant |
@@ -64,7 +64,6 @@ LIVE CAMERA / VIDEO FILE
 │ Multi-Model Temporal Inference        │
 │  TCN ──┐                             │
 │  GRU ──┤→ Ensemble Fusion            │
-│  (BiLSTM, Transformer: optional)     │
 │  (ST-GCN: scaffold)                  │
 └────────┬─────────────────────────────┘
          ▼
@@ -215,8 +214,6 @@ Note: `confidence` is NOT a model output head. It is computed post-hoc from: (a)
 **Models trained:**
 1. TCN (production) — causal temporal convolutions
 2. GRU (production) — single-direction gated RNN
-3. BiLSTM (optional) — bidirectional LSTM
-4. Transformer (optional) — encoder-only with positional encoding
 
 **Loss function:**
 - Phase head: cross-entropy loss (4-class classification)
@@ -251,7 +248,7 @@ Note: `confidence` is NOT a model output head. It is computed post-hoc from: (a)
 
 **GRU**: Lightweight RNN, ~1ms per window, proven on motion sequence data, captures temporal dynamics efficiently.
 
-BiLSTM and Transformer remain available as optional ensemble members for experimentation.
+TCN + GRU are the only temporal models. No BiLSTM or Transformer.
 
 ## Feature Schema
 
@@ -575,8 +572,6 @@ squat_coach/
     temporal_base.py              # base class for all temporal models
     temporal_tcn.py               # TCN implementation
     temporal_gru.py               # GRU implementation
-    temporal_bilstm.py            # BiLSTM implementation
-    temporal_transformer.py       # Transformer encoder implementation
     temporal_stgcn_scaffold.py    # ST-GCN scaffold (extension point only, not trained or used in production)
     ensemble_fusion.py            # confidence-weighted ensemble fusion
     feature_tensor_builder.py     # build model input tensors from features
