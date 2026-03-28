@@ -1,26 +1,94 @@
-@import 'tailwindcss';
+@import "tailwindcss";
+@import "tw-animate-css";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Backgrounds */
+  --bg-primary: #FFFFFF;
+  --bg-surface: #F4F4F5;
+  --bg-card: #FFFFFF;
+  --bg-elevated: #FAFAFA;
+
+  /* Text */
+  --text-primary: #09090B;
+  --text-secondary: #71717A;
+  --text-muted: #A1A1AA;
+
+  /* Borders */
+  --border: #E4E4E7;
+  --border-light: #F4F4F5;
+
+  /* Brand gradients */
+  --gradient-start: #8B5CF6;
+  --gradient-end: #F472B6;
+  --gradient2-start: #06B6D4;
+  --gradient2-end: #8B5CF6;
+
+  /* Semantic */
+  --success: #22C55E;
+  --success-muted: #14B8A6;
+  --error: #EF4444;
+  --warning: #F59E0B;
+
+  /* Insight backgrounds */
+  --insight-error-bg: #FFF5F5;
+  --insight-success-bg: #F0FDF4;
+  --insight-warning-bg: #FFFBEB;
+
+  /* Camera */
+  --camera-bg: #1A1A2E;
+  --camera-bg-dark: #0F0F1A;
+}
+
+.dark {
+  --bg-primary: #0A0A0F;
+  --bg-surface: #1A1A2E;
+  --bg-card: #1A1A2E;
+  --bg-elevated: #252540;
+
+  --text-primary: #FFFFFF;
+  --text-secondary: #A1A1AA;
+  --text-muted: #71717A;
+
+  --border: #2A2A3E;
+  --border-light: #2A2A3E;
+
+  --insight-error-bg: #2A1515;
+  --insight-success-bg: #0F2A1A;
+  --insight-warning-bg: #2A2010;
+
+  --camera-bg: #151525;
+  --camera-bg-dark: #0A0A14;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-bg-primary: var(--bg-primary);
+  --color-bg-surface: var(--bg-surface);
+  --color-bg-card: var(--bg-card);
+  --color-bg-elevated: var(--bg-elevated);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-border: var(--border);
+  --color-border-light: var(--border-light);
+  --color-gradient-start: var(--gradient-start);
+  --color-gradient-end: var(--gradient-end);
+  --color-gradient2-start: var(--gradient2-start);
+  --color-gradient2-end: var(--gradient2-end);
+  --color-success: var(--success);
+  --color-success-muted: var(--success-muted);
+  --color-error: var(--error);
+  --color-warning: var(--warning);
+  --color-insight-error-bg: var(--insight-error-bg);
+  --color-insight-success-bg: var(--insight-success-bg);
+  --color-insight-warning-bg: var(--insight-warning-bg);
+  --color-camera-bg: var(--camera-bg);
+  --color-camera-bg-dark: var(--camera-bg-dark);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
 }

@@ -1,65 +1,80 @@
-import Image from 'next/image';
+"use client";
 
-export default function Home() {
+import { Dumbbell } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+
+import { cn } from "@/lib/utils";
+import { useSessionContext } from "@/providers/session-provider";
+
+export default function EntryPage() {
+  const [username, setUsername] = useState("");
+  const { setUser } = useSessionContext();
+  const router = useRouter();
+
+  function handleJoin(role: "player" | "coach") {
+    if (!username.trim()) return;
+    setUser(username.trim(), role);
+    router.push(role === "coach" ? "/coach" : "/home");
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between bg-white px-16 py-32 sm:items-start dark:bg-black">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl leading-10 font-semibold tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{' '}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{' '}
-            or the{' '}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{' '}
-            center.
-          </p>
+    <div className="flex min-h-dvh flex-col items-center justify-center bg-bg-surface px-4">
+      {/* Gradient header accent */}
+      <div className="fixed top-0 left-0 h-48 w-full bg-gradient-to-r from-gradient-start to-gradient-end opacity-20 blur-3xl" />
+
+      <div className="relative z-10 flex w-full max-w-sm flex-col items-center gap-8">
+        {/* Logo */}
+        <div className="flex items-center gap-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-gradient-start to-gradient-end">
+            <Dumbbell className="h-6 w-6 text-white" />
+          </div>
+          <h1 className="text-3xl font-bold text-text-primary">GymAI</h1>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="bg-foreground text-background flex h-12 w-full items-center justify-center gap-2 rounded-full px-5 transition-colors hover:bg-[#383838] md:w-[158px] dark:hover:bg-[#ccc]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] md:w-[158px] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        <p className="text-center text-text-secondary">
+          Real-time exercise form analysis.
+          <br />
+          Enter your name to get started.
+        </p>
+
+        {/* Card */}
+        <div className="w-full rounded-3xl bg-bg-card p-6 shadow-lg ring-1 ring-border-light">
+          <input
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleJoin("player")}
+            placeholder="Your name"
+            className="mb-6 w-full rounded-2xl border border-border bg-bg-surface px-4 py-3 text-text-primary placeholder:text-text-muted outline-none focus:ring-2 focus:ring-gradient-start"
+            autoFocus
+          />
+
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={() => handleJoin("player")}
+              disabled={!username.trim()}
+              className={cn(
+                "w-full rounded-2xl bg-gradient-to-r from-gradient-start to-gradient-end py-3 text-sm font-semibold text-white transition-opacity",
+                username.trim() ? "hover:opacity-90" : "opacity-40 cursor-not-allowed"
+              )}
+            >
+              Join as Player
+            </button>
+
+            <button
+              onClick={() => handleJoin("coach")}
+              disabled={!username.trim()}
+              className={cn(
+                "w-full rounded-2xl border border-gradient-start py-3 text-sm font-semibold text-gradient-start transition-colors",
+                username.trim() ? "hover:bg-gradient-start/10" : "opacity-40 cursor-not-allowed"
+              )}
+            >
+              Join as Coach
+            </button>
+          </div>
         </div>
-      </main>
+      </div>
     </div>
   );
 }

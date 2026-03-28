@@ -1,0 +1,18 @@
+{
+  "name": "GymAI",
+  "short_name": "GymAI",
+  "description": "Real-time exercise form analysis",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0A0A0F",
+  "theme_color": "#8B5CF6",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
