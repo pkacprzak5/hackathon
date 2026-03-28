@@ -87,8 +87,15 @@
   --font-mono: var(--font-geist-mono);
 }
 
+html,
 body {
-  background: var(--bg-primary);
+  width: 100%;
+  min-height: 100dvh;
+  overflow-x: hidden;
+}
+
+body {
+  background: var(--bg-surface);
   color: var(--text-primary);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
 }

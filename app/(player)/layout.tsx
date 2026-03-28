@@ -29,11 +29,11 @@ export default function PlayerLayout({ children }: { children: ReactNode }) {
   if (!isAuthenticated) return null;
 
   return (
-    <div className="mx-auto flex min-h-dvh max-w-[430px] flex-col bg-bg-surface">
+    <div className="flex min-h-dvh w-full flex-col overflow-x-hidden bg-bg-surface">
       <main className="flex-1 overflow-y-auto pb-20">{children}</main>
 
-      <nav className="fixed bottom-0 left-1/2 z-50 w-full max-w-[430px] -translate-x-1/2 border-t border-border-light bg-bg-card/80 backdrop-blur-xl">
-        <div className="flex items-center justify-around py-2">
+      <nav className="fixed bottom-0 left-0 z-50 w-full border-t border-border-light bg-bg-card/80 backdrop-blur-xl">
+        <div className="flex items-center justify-around py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
           {tabs.map((tab) => {
             const isActive =
               pathname === tab.href ||
