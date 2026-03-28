@@ -105,18 +105,20 @@ export default function SoloSessionPage() {
         </button>
       </div>
 
-      {/* Hidden video element — exists only for frame capture, never shown */}
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        muted
-        style={{ position: "fixed", top: -9999, left: -9999, width: 1, height: 1 }}
-      />
-
       {/* Video display */}
       <div ref={containerRef} className="relative mx-4 aspect-[3/4] overflow-hidden rounded-xl bg-black">
-        {/* Server-rendered frames from buffer, center-cropped onto canvas */}
+        {/* Camera feed — visible during calibration for positioning */}
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          className={`absolute inset-0 h-full w-full object-cover ${
+            state.status === "active" ? "invisible" : ""
+          }`}
+        />
+
+        {/* Server-rendered frames from buffer — fully covers video when active */}
         <canvas
           ref={(node) => {
             (renderedCanvasRef as React.MutableRefObject<HTMLCanvasElement | null>).current = node;
@@ -126,7 +128,7 @@ export default function SoloSessionPage() {
               node.height = rect.height;
             }
           }}
-          className={`absolute inset-0 h-full w-full ${
+          className={`absolute inset-0 z-10 h-full w-full bg-black ${
             state.status === "active" ? "" : "hidden"
           }`}
         />

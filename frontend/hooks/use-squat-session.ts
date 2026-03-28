@@ -152,18 +152,24 @@ export function useSquatSession() {
 
       const elapsed = timestamp - lastDisplayTime.current;
 
-      if (elapsed >= PLAYBACK_INTERVAL) {
-        const blob = frameBuffer.current.shift();
-        if (blob) {
-          const url = URL.createObjectURL(blob);
-          const img = new Image();
-          img.onload = () => {
-            drawFrameToCanvas(img);
-            URL.revokeObjectURL(url);
-          };
-          img.src = url;
-          lastDisplayTime.current = timestamp;
-        }
+      if (elapsed >= PLAYBACK_INTERVAL && frameBuffer.current.length > 0) {
+        // Peek at next frame but don't remove yet
+        const blob = frameBuffer.current[0];
+        const url = URL.createObjectURL(blob);
+        const img = new Image();
+        img.onload = () => {
+          // Frame decoded successfully — now draw and remove from buffer
+          drawFrameToCanvas(img);
+          frameBuffer.current.shift();
+          URL.revokeObjectURL(url);
+        };
+        img.onerror = () => {
+          // Bad frame — drop it, keep current display
+          frameBuffer.current.shift();
+          URL.revokeObjectURL(url);
+        };
+        img.src = url;
+        lastDisplayTime.current = timestamp;
       }
 
       playbackRafRef.current = requestAnimationFrame(playFrame);
