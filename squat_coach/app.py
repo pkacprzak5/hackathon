@@ -115,6 +115,10 @@ class SquatCoachApp:
         rep_max_torso = 0.0
         rep_max_head_offset = 0.0
         rep_features_snapshot: dict = {}
+        last_cue = ""
+        last_cue_time = 0.0
+        cue_display_duration = 5.0  # Show cue for 5 seconds minimum
+        current_features: dict = {}
 
         logger.info("Starting Squat Coach in %s mode", self._mode)
 
@@ -145,6 +149,7 @@ class SquatCoachApp:
                         session.rep_count,
                         session.current_score,
                         session.current_cue,
+                        features=current_features,
                     )
                     cv2.imshow("Squat Coach", frame)
                     if cv2.waitKey(1) & 0xFF == ord("q"):
@@ -235,8 +240,18 @@ class SquatCoachApp:
                 fault_config["baseline_torso_angle"] = ideal_ref.trunk_neutral_angle if ideal_ref else 10.0
                 faults = fault_engine.evaluate(features, fault_config)
 
-                # Coaching cue
-                session.current_cue = coach.select_cue(faults)
+                # Coaching cue — persist for cue_display_duration seconds
+                new_cue = coach.select_cue(faults)
+                now_cue = time.monotonic()
+                if new_cue:
+                    last_cue = new_cue
+                    last_cue_time = now_cue
+                    session.current_cue = new_cue
+                elif now_cue - last_cue_time < cue_display_duration:
+                    session.current_cue = last_cue  # Keep showing
+                else:
+                    session.current_cue = ""
+                current_features = features
 
                 # Rep segmentation
                 rep_result = rep_segmenter.update(phase, timestamp)
@@ -329,6 +344,7 @@ class SquatCoachApp:
                     session.rep_count,
                     session.current_score,
                     session.current_cue,
+                    features=current_features,
                 )
 
                 cv2.imshow("Squat Coach", frame)
