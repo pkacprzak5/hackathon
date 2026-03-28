@@ -32,7 +32,7 @@ from squat_coach.scoring.rationale import build_rationale
 from squat_coach.scoring.trend_analysis import TrendTracker
 from squat_coach.events.event_builder import build_rep_summary
 from squat_coach.events.formatter import format_frame_log, format_rep_summary
-from squat_coach.events.gemini_payloads import format_gemini_payload
+from squat_coach.events.gemini_payloads import format_gemini_payload, send_to_gemini
 from squat_coach.events.coaching_priority import CoachingPrioritizer
 from squat_coach.rendering.overlay import render_overlay
 from squat_coach.session.session_state import SessionState
@@ -317,9 +317,21 @@ class SquatCoachApp:
                     jsonl_logger.log_rep(rep_event)
                     rep_history.add(rep_event)
 
-                    # Gemini payload (placeholder — log for now)
+                    # Gemini coaching feedback
                     gemini = format_gemini_payload(rep_event)
-                    logger.debug("Gemini payload: %s", gemini)
+                    gemini_cfg = self._config.get("gemini", {})
+                    if gemini_cfg.get("enabled", False):
+                        gemini_key = gemini_cfg.get("api_key", "")
+                        gemini_model = gemini_cfg.get("model", "gemini-2.0-flash")
+                        feedback = send_to_gemini(gemini, api_key=gemini_key, model=gemini_model)
+                        if feedback:
+                            logger.info("🤖 GEMINI: %s", feedback)
+                            # Show Gemini feedback as the coaching cue
+                            last_cue = feedback
+                            last_cue_time = time.monotonic()
+                            session.current_cue = feedback
+                    else:
+                        logger.debug("Gemini payload: %s", gemini)
 
                     # Reset per-rep tracking
                     rep_min_knee = 180.0

@@ -23,3 +23,8 @@ logging:
 session:
   log_dir: "sessions"           # Directory for JSONL session logs
   log_features: false           # Per-frame JSONL feature logging
+
+gemini:
+  enabled: true                  # Set to true to get Gemini coaching feedback
+  api_key: ""                    # Paste your Gemini API key here, or set GEMINI_API_KEY env var
+  model: "gemini-2.0-flash"     # Model to use for coaching text generation
