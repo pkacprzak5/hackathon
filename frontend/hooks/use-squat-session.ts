@@ -39,7 +39,8 @@ export function useSquatSession() {
   const renderedCanvasRef = useRef<HTMLCanvasElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const captureIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const playbackIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const playbackRafRef = useRef<number>(0);
+  const lastDisplayTime = useRef<number>(0);
   const offscreenRef = useRef<HTMLCanvasElement | null>(null);
 
   // Frame buffer: queue of blob URLs waiting to be displayed
@@ -139,24 +140,43 @@ export function useSquatSession() {
     ctx.drawImage(img, sx, sy, sw, sh, 0, 0, cw, ch);
   }, []);
 
-  // Playback loop — pulls frames from buffer at steady 42ms rate
+  // Playback via requestAnimationFrame — smooth, adaptive timing
   const startPlayback = useCallback(() => {
-    if (playbackIntervalRef.current) return;
+    if (playbackRafRef.current) return;
 
-    playbackIntervalRef.current = setInterval(() => {
-      if (!bufferReady.current) return;
+    const playFrame = (timestamp: number) => {
+      if (!bufferReady.current) {
+        playbackRafRef.current = requestAnimationFrame(playFrame);
+        return;
+      }
 
-      const blob = frameBuffer.current.shift();
-      if (!blob) return;
+      const elapsed = timestamp - lastDisplayTime.current;
 
-      const url = URL.createObjectURL(blob);
-      const img = new Image();
-      img.onload = () => {
-        drawFrameToCanvas(img);
-        URL.revokeObjectURL(url);
-      };
-      img.src = url;
-    }, PLAYBACK_INTERVAL);
+      // Adaptive timing based on buffer level:
+      // Buffer full (>6): play slightly faster to drain (35ms)
+      // Buffer low (<3): play slightly slower to let it refill (50ms)
+      // Normal: 40ms (25fps)
+      const bufLen = frameBuffer.current.length;
+      const targetInterval = bufLen > 6 ? 35 : bufLen < 3 ? 50 : PLAYBACK_INTERVAL;
+
+      if (elapsed >= targetInterval) {
+        const blob = frameBuffer.current.shift();
+        if (blob) {
+          const url = URL.createObjectURL(blob);
+          const img = new Image();
+          img.onload = () => {
+            drawFrameToCanvas(img);
+            URL.revokeObjectURL(url);
+          };
+          img.src = url;
+          lastDisplayTime.current = timestamp;
+        }
+      }
+
+      playbackRafRef.current = requestAnimationFrame(playFrame);
+    };
+
+    playbackRafRef.current = requestAnimationFrame(playFrame);
   }, [drawFrameToCanvas]);
 
   const startCapture = useCallback(() => {
@@ -241,7 +261,7 @@ export function useSquatSession() {
     ws.onclose = (e) => {
       console.log("WebSocket closed:", e.code, e.reason);
       if (captureIntervalRef.current) clearInterval(captureIntervalRef.current);
-      if (playbackIntervalRef.current) clearInterval(playbackIntervalRef.current);
+      if (playbackRafRef.current) cancelAnimationFrame(playbackRafRef.current);
     };
     ws.onerror = (e) => {
       console.error("WebSocket error:", e);
@@ -262,9 +282,9 @@ export function useSquatSession() {
       clearInterval(captureIntervalRef.current);
       captureIntervalRef.current = null;
     }
-    if (playbackIntervalRef.current) {
-      clearInterval(playbackIntervalRef.current);
-      playbackIntervalRef.current = null;
+    if (playbackRafRef.current) {
+      cancelAnimationFrame(playbackRafRef.current);
+      playbackRafRef.current = 0;
     }
     if (wsRef.current) {
       wsRef.current.close();
@@ -283,7 +303,7 @@ export function useSquatSession() {
   useEffect(() => {
     return () => {
       if (captureIntervalRef.current) clearInterval(captureIntervalRef.current);
-      if (playbackIntervalRef.current) clearInterval(playbackIntervalRef.current);
+      if (playbackRafRef.current) cancelAnimationFrame(playbackRafRef.current);
       if (wsRef.current) wsRef.current.close();
       if (videoRef.current?.srcObject) {
         const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
