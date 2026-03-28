@@ -120,6 +120,11 @@ class SquatCoachApp:
         cue_display_duration = 5.0  # Show cue for 5 seconds minimum
         current_features: dict = {}
 
+        # Score tracking across reps
+        last_rep_score: float = 0.0
+        best_rep_score: float = 0.0
+        all_rep_scores: list[float] = []
+
         logger.info("Starting Squat Coach in %s mode", self._mode)
 
         try:
@@ -143,6 +148,7 @@ class SquatCoachApp:
                     if session.dropped_frame_count > self._config["preprocessing"]["max_dropped_frames"]:
                         session.current_cue = "Repositioning needed"
                     # Still render overlay with last known state
+                    avg_s = sum(all_rep_scores) / len(all_rep_scores) if all_rep_scores else 0
                     frame = render_overlay(
                         frame, None, None,
                         session.current_phase.value,
@@ -150,6 +156,9 @@ class SquatCoachApp:
                         session.current_score,
                         session.current_cue,
                         features=current_features,
+                        last_score=last_rep_score,
+                        best_score=best_rep_score,
+                        avg_score=avg_s,
                     )
                     cv2.imshow("Squat Coach", frame)
                     if cv2.waitKey(1) & 0xFF == ord("q"):
@@ -312,6 +321,11 @@ class SquatCoachApp:
 
                     session.current_score = rep_quality
 
+                    # Track scores across reps
+                    last_rep_score = rep_quality
+                    best_rep_score = max(best_rep_score, rep_quality)
+                    all_rep_scores.append(rep_quality)
+
                     # Build rationale
                     comparison = {
                         "depth": f"{max(0, rep_min_knee - (ideal_ref.target_knee_angle if ideal_ref else 90)):.0f} deg from target",
@@ -370,6 +384,7 @@ class SquatCoachApp:
                     last_log_time = now
 
                 # Render overlay
+                avg_s = sum(all_rep_scores) / len(all_rep_scores) if all_rep_scores else 0
                 frame = render_overlay(
                     frame,
                     pose_result.image_landmarks,
@@ -379,6 +394,9 @@ class SquatCoachApp:
                     session.current_score,
                     session.current_cue,
                     features=current_features,
+                    last_score=last_rep_score,
+                    best_score=best_rep_score,
+                    avg_score=avg_s,
                 )
 
                 cv2.imshow("Squat Coach", frame)

@@ -2,7 +2,9 @@
 import numpy as np
 from numpy.typing import NDArray
 from squat_coach.rendering.draw_pose import draw_skeleton
-from squat_coach.rendering.draw_metrics import draw_phase_label, draw_rep_count, draw_score, draw_angles
+from squat_coach.rendering.draw_metrics import (
+    draw_phase_label, draw_rep_count, draw_score, draw_angles, draw_score_panel,
+)
 from squat_coach.rendering.draw_feedback import draw_coaching_cue
 
 
@@ -15,22 +17,11 @@ def render_overlay(
     score: float,
     coaching_cue: str,
     features: dict | None = None,
+    last_score: float = 0.0,
+    best_score: float = 0.0,
+    avg_score: float = 0.0,
 ) -> NDArray[np.uint8]:
-    """Render the full simple overlay on a video frame.
-
-    Args:
-        frame: BGR frame (modified in-place and returned).
-        image_landmarks: (33, 3) or None if no detection.
-        visibility: (33,) or None.
-        phase: Current phase name string.
-        rep_count: Current rep count.
-        score: Current form score (0-100).
-        coaching_cue: Active coaching cue string.
-        features: Optional features dict to display angles.
-
-    Returns:
-        Frame with overlay drawn.
-    """
+    """Render the full simple overlay on a video frame."""
     if image_landmarks is not None and visibility is not None:
         draw_skeleton(frame, image_landmarks, visibility)
 
@@ -39,6 +30,7 @@ def render_overlay(
     draw_score(frame, score)
     if features:
         draw_angles(frame, features)
+    draw_score_panel(frame, last_score, best_score, avg_score, rep_count)
     draw_coaching_cue(frame, coaching_cue)
 
     return frame

@@ -48,6 +48,41 @@ def draw_score(frame: NDArray[np.uint8], score: float) -> None:
     draw_text_with_bg(frame, f"Score: {score:.0f}", (10, h - 60), font_scale=0.9)
 
 
+def draw_score_panel(
+    frame: NDArray[np.uint8],
+    last_score: float,
+    best_score: float,
+    avg_score: float,
+    rep_count: int,
+) -> None:
+    """Draw score panel on the right side: last rep, best, average."""
+    h, w = frame.shape[:2]
+    x = w - 220
+    y_start = 80
+
+    if rep_count == 0:
+        return
+
+    # Color code the last score
+    if last_score >= 80:
+        score_color = (0, 255, 0)    # green
+    elif last_score >= 60:
+        score_color = (0, 220, 255)  # yellow
+    else:
+        score_color = (0, 100, 255)  # red-orange
+
+    lines = [
+        (f"Last: {last_score:.0f}", score_color),
+        (f"Best: {best_score:.0f}", (200, 255, 200)),
+        (f"Avg:  {avg_score:.0f}", (200, 200, 200)),
+    ]
+    for i, (text, color) in enumerate(lines):
+        draw_text_with_bg(
+            frame, text, (x, y_start + i * 35),
+            font_scale=0.65, color=color,
+        )
+
+
 def draw_angles(frame: NDArray[np.uint8], features: dict) -> None:
     """Draw key angles on the left side."""
     h, w = frame.shape[:2]
