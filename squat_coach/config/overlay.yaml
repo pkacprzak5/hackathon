@@ -1,0 +1,21 @@
+# squat_coach/config/overlay.yaml
+# Simple overlay display settings
+
+overlay:
+  skeleton_color: [0, 255, 0]       # BGR green
+  skeleton_thickness: 2
+  landmark_radius: 4
+  landmark_color: [0, 200, 255]     # BGR yellow-orange
+
+  text:
+    font_scale: 0.7
+    thickness: 2
+    color: [255, 255, 255]          # White
+    bg_color: [0, 0, 0]             # Black background
+    bg_alpha: 0.6
+
+  cue:
+    display_duration_s: 3.0
+    suppress_repeat_s: 5.0
+    font_scale: 0.8
+    color: [0, 200, 255]            # Yellow-orange

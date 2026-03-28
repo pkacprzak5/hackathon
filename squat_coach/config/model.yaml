@@ -1,0 +1,57 @@
+# squat_coach/config/model.yaml
+# Temporal model architecture and ensemble settings
+
+sequence:
+  length: 60                    # Frames per window (2s at 30fps)
+  feature_dim: 42               # D=42 engineered features
+
+models:
+  tcn:
+    enabled: true
+    num_channels: [64, 64, 64]  # channels per TCN block
+    kernel_size: 3
+    dropout: 0.2
+
+  gru:
+    enabled: true
+    hidden_dim: 128
+    num_layers: 2
+    dropout: 0.2
+
+  stgcn:
+    enabled: false              # Scaffold only — not trained
+
+output_heads:
+  phase_classes: 4              # top, descent, bottom, ascent
+  fault_classes: 6              # depth, forward_lean, rounded_back, heel, torso, tempo
+  quality_dim: 1                # scalar quality regression
+
+ensemble:
+  weights:
+    tcn: 0.5
+    gru: 0.5
+  per_head_weights:             # Optional per-head overrides
+    phase:
+      tcn: 0.5
+      gru: 0.5
+    fault:
+      tcn: 0.5
+      gru: 0.5
+    quality:
+      tcn: 0.5
+      gru: 0.5
+
+training:
+  batch_size: 32
+  learning_rate: 0.001
+  max_epochs: 50
+  patience: 10                  # Early stopping patience
+  loss_weights:
+    phase: 1.0
+    fault: 1.0
+    quality: 0.5
+  val_split: 0.15
+  test_split: 0.15
+
+checkpoints:
+  dir: "squat_coach/models/checkpoints"

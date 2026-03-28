@@ -1,0 +1,39 @@
+# squat_coach/config/scoring.yaml
+# Score weights, fault thresholds, calibration
+
+scoring:
+  weights:
+    depth: 0.25
+    trunk_control: 0.25
+    posture_stability: 0.25
+    movement_consistency: 0.25
+  model_quality_weight: 0.2     # model quality_score weight in rep_quality
+
+  overall_form_ema_alpha: 0.3   # EMA smoothing for session score
+
+calibration:
+  target_knee_angle_deg: 90.0   # Target depth (adjustable per user)
+  trunk_tolerance_deg: 15.0     # Acceptable trunk deviation from baseline
+  min_rep_duration_s: 0.8       # Reject reps shorter than this
+  min_phase_duration_s: 0.15    # Debounce: min phase duration
+  rep_cooldown_s: 0.5           # Min time between reps
+
+faults:
+  confidence_threshold: 0.5     # Suppress faults below this confidence
+  persistence_frames: 5         # Fault must persist this many frames
+
+  thresholds:
+    insufficient_depth:
+      knee_angle_max_deg: 110.0
+    excessive_forward_lean:
+      trunk_deviation_deg: 25.0
+    rounded_back_risk:
+      risk_threshold: 0.5
+    unstable_torso:
+      variance_threshold: 8.0
+    heel_fault:
+      displacement_threshold: 0.05
+    knee_valgus:
+      angle_threshold_deg: 10.0
+    inconsistent_tempo:
+      timing_deviation_ratio: 0.4
