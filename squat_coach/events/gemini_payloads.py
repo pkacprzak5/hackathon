@@ -19,31 +19,25 @@ from squat_coach.events.schemas import RepSummaryEvent
 
 logger = logging.getLogger("squat_coach.gemini")
 
-# Background TTS so it doesn't block the video loop
+# Background TTS — never blocks the video loop
 _tts_lock = threading.Lock()
 
 
 def speak(text: str) -> None:
-    """Speak text using macOS 'say' command in a background thread.
-
-    Non-blocking — runs in a separate thread so the video loop isn't paused.
-    Only one utterance at a time (new speech cancels previous).
-    """
+    """Speak text using macOS 'say' with English voice in a background thread."""
     def _run():
         with _tts_lock:
             try:
-                # Kill any previous say process
                 subprocess.run(["killall", "say"], capture_output=True)
                 subprocess.run(
-                    ["say", "-r", "180", text],  # rate 180 words/min (slightly fast)
+                    ["say", "-v", "Samantha", "-r", "190", text],
                     capture_output=True,
                     timeout=15,
                 )
             except Exception as e:
                 logger.debug("TTS error: %s", e)
 
-    thread = threading.Thread(target=_run, daemon=True)
-    thread.start()
+    threading.Thread(target=_run, daemon=True).start()
 
 # Lazy-initialized client
 _client = None
@@ -109,42 +103,57 @@ def format_gemini_text_prompt(payload: dict) -> str:
     return prompt
 
 
-def send_to_gemini(
+# Shared state for async Gemini feedback
+_last_feedback: Optional[str] = None
+_feedback_lock = threading.Lock()
+
+
+def get_last_feedback() -> Optional[str]:
+    """Get the most recent Gemini feedback (thread-safe). Returns None if none yet."""
+    with _feedback_lock:
+        return _last_feedback
+
+
+def send_to_gemini_async(
     payload: dict,
     api_key: str = "",
     model: str = "gemini-2.0-flash",
     speak_enabled: bool = True,
-) -> Optional[str]:
-    """Send rep summary to Gemini and get coaching feedback.
+    on_feedback: Optional[callable] = None,
+) -> None:
+    """Send rep summary to Gemini in a background thread. Never blocks.
 
-    Args:
-        payload: Structured rep summary from format_gemini_payload().
-        api_key: Gemini API key. Falls back to GEMINI_API_KEY env var.
-        model: Gemini model to use.
-
-    Returns:
-        Coaching feedback text, or None if Gemini is unavailable.
+    The API call + TTS all happen off the main thread.
+    Results available via get_last_feedback() or the on_feedback callback.
     """
     key = api_key or os.environ.get("GEMINI_API_KEY", "")
     if not key:
-        return None
+        return
 
-    client = _get_client(key)
-    if client is None:
-        return None
+    def _run():
+        global _last_feedback
+        client = _get_client(key)
+        if client is None:
+            return
 
-    prompt = format_gemini_text_prompt(payload)
+        prompt = format_gemini_text_prompt(payload)
+        try:
+            response = client.models.generate_content(
+                model=model,
+                contents=prompt,
+            )
+            feedback = response.text.strip()
+            logger.info("Gemini: %s", feedback)
 
-    try:
-        response = client.models.generate_content(
-            model=model,
-            contents=prompt,
-        )
-        feedback = response.text.strip()
-        logger.info("Gemini feedback: %s", feedback)
-        if speak_enabled:
-            speak(feedback)
-        return feedback
-    except Exception as e:
-        logger.error("Gemini API error: %s", e)
-        return None
+            with _feedback_lock:
+                _last_feedback = feedback
+
+            if on_feedback:
+                on_feedback(feedback)
+
+            if speak_enabled:
+                speak(feedback)
+        except Exception as e:
+            logger.error("Gemini API error: %s", e)
+
+    threading.Thread(target=_run, daemon=True).start()

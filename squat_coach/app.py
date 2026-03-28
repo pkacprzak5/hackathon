@@ -32,7 +32,7 @@ from squat_coach.scoring.rationale import build_rationale
 from squat_coach.scoring.trend_analysis import TrendTracker
 from squat_coach.events.event_builder import build_rep_summary
 from squat_coach.events.formatter import format_frame_log, format_rep_summary
-from squat_coach.events.gemini_payloads import format_gemini_payload, send_to_gemini
+from squat_coach.events.gemini_payloads import format_gemini_payload, send_to_gemini_async, get_last_feedback
 from squat_coach.events.coaching_priority import CoachingPrioritizer
 from squat_coach.rendering.overlay import render_overlay
 from squat_coach.session.session_state import SessionState
@@ -353,20 +353,25 @@ class SquatCoachApp:
                     jsonl_logger.log_rep(rep_event)
                     rep_history.add(rep_event)
 
-                    # Gemini coaching feedback
+                    # Gemini coaching feedback (fully async — never blocks video)
                     gemini = format_gemini_payload(rep_event)
                     gemini_cfg = self._config.get("gemini", {})
                     if gemini_cfg.get("enabled", False):
                         gemini_key = gemini_cfg.get("api_key", "")
                         gemini_model = gemini_cfg.get("model", "gemini-2.0-flash")
                         speak_on = gemini_cfg.get("speak", True)
-                        feedback = send_to_gemini(gemini, api_key=gemini_key, model=gemini_model, speak_enabled=speak_on)
-                        if feedback:
-                            logger.info("🤖 GEMINI: %s", feedback)
-                            # Show Gemini feedback as the coaching cue
-                            last_cue = feedback
+
+                        def _on_gemini_feedback(fb: str) -> None:
+                            nonlocal last_cue, last_cue_time
+                            last_cue = fb
                             last_cue_time = time.monotonic()
-                            session.current_cue = feedback
+                            session.current_cue = fb
+                            logger.info("GEMINI: %s", fb)
+
+                        send_to_gemini_async(
+                            gemini, api_key=gemini_key, model=gemini_model,
+                            speak_enabled=speak_on, on_feedback=_on_gemini_feedback,
+                        )
                     else:
                         logger.debug("Gemini payload: %s", gemini)
 
