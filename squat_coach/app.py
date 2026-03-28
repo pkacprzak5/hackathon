@@ -392,7 +392,7 @@ class SquatCoachApp:
                     rep_min_knee = 180.0
                     rep_max_torso = 0.0
                     rep_max_head_offset = 0.0
-                    live_score_ema = session.current_score  # carry over for smooth transition
+                    live_score_ema = 100.0  # fresh start for next rep
 
                 # Terminal frame logging (throttled)
                 now = time.monotonic()
