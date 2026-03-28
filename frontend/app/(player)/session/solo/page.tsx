@@ -105,22 +105,18 @@ export default function SoloSessionPage() {
         </button>
       </div>
 
-      {/* Video feed */}
-      <div ref={containerRef} className="relative mx-4 aspect-[3/4] overflow-hidden rounded-xl bg-camera-bg">
-        {/* Camera feed — full size to keep browser rendering frames for capture.
-            Visible during calibration, hidden once server frames start. */}
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted
-          className={`absolute inset-0 h-full w-full object-cover ${
-            state.status === "active" ? "invisible" : ""
-          }`}
-        />
+      {/* Hidden video element — exists only for frame capture, never shown */}
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted
+        style={{ position: "fixed", top: -9999, left: -9999, width: 1, height: 1 }}
+      />
 
-        {/* Server-rendered frames drawn center-cropped onto canvas.
-            Black background so camera doesn't show through before first frame. */}
+      {/* Video display */}
+      <div ref={containerRef} className="relative mx-4 aspect-[3/4] overflow-hidden rounded-xl bg-black">
+        {/* Server-rendered frames from buffer, center-cropped onto canvas */}
         <canvas
           ref={(node) => {
             (renderedCanvasRef as React.MutableRefObject<HTMLCanvasElement | null>).current = node;
@@ -128,16 +124,10 @@ export default function SoloSessionPage() {
               const rect = containerRef.current.getBoundingClientRect();
               node.width = rect.width;
               node.height = rect.height;
-              // Fill black immediately so camera doesn't bleed through
-              const ctx = node.getContext("2d");
-              if (ctx) {
-                ctx.fillStyle = "#000";
-                ctx.fillRect(0, 0, node.width, node.height);
-              }
             }
           }}
           className={`absolute inset-0 h-full w-full ${
-            state.status === "active" ? "z-10" : "hidden"
+            state.status === "active" ? "" : "hidden"
           }`}
         />
 
