@@ -106,24 +106,24 @@ export default function SoloSessionPage() {
 
       {/* Video feed */}
       <div className="relative mx-4 aspect-[3/4] overflow-hidden rounded-xl bg-camera-bg">
-        {/* Hidden video — captures camera frames to send to server */}
+        {/* Live camera — always active for frame capture, hidden behind rendered img */}
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted
-          className={state.status === "active" ? "hidden" : "h-full w-full object-cover"}
+          className="absolute inset-0 h-full w-full object-cover"
         />
 
-        {/* Server-rendered frames (skeleton on video) — updated via WebSocket binary */}
-        {state.status === "active" && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            ref={renderedImgRef}
-            alt=""
-            className="h-full w-full object-contain bg-black"
-          />
-        )}
+        {/* Server-rendered frames (skeleton on video) — overlays on top of live video */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          ref={renderedImgRef}
+          alt=""
+          className={`absolute inset-0 h-full w-full object-contain bg-black ${
+            state.status === "active" ? "z-10" : "hidden"
+          }`}
+        />
 
         {/* Calibration overlay */}
         {state.status === "calibrating" && (
