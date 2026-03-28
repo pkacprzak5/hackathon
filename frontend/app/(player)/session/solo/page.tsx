@@ -120,7 +120,7 @@ export default function SoloSessionPage() {
         <img
           ref={renderedImgRef}
           alt=""
-          className={`absolute inset-0 h-full w-full object-contain bg-black ${
+          className={`absolute inset-0 h-full w-full object-cover ${
             state.status === "active" ? "z-10" : "hidden"
           }`}
         />

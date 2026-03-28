@@ -16,9 +16,9 @@ const CAPTURE_WIDTH = 360;
 const CAPTURE_HEIGHT = 640;
 const JPEG_QUALITY = 0.5;
 
-// Frame buffer — adds ~2-5 frames of latency for smooth playback
-const BUFFER_SIZE = 3;
-const PLAYBACK_INTERVAL = 42; // ms, ~24fps playback
+// Frame buffer — initial fill of 5 frames for jitter protection, then play ASAP
+const BUFFER_FILL_SIZE = 5;
+const PLAYBACK_INTERVAL = 10; // ms, poll fast — plays frames as soon as available
 
 export function useSquatSession() {
   const [state, setState] = useState<SquatSessionState>({
@@ -103,13 +103,13 @@ export function useSquatSession() {
       // Push frame into buffer
       frameBuffer.current.push(event.data);
 
-      // Drop oldest frames if buffer grows too large (keep max ~8 frames)
-      while (frameBuffer.current.length > BUFFER_SIZE * 2) {
+      // Drop oldest if buffer grows too large (network stall recovery)
+      while (frameBuffer.current.length > BUFFER_FILL_SIZE * 2) {
         frameBuffer.current.shift();
       }
 
-      // Mark buffer as ready once we have enough frames
-      if (!bufferReady.current && frameBuffer.current.length >= BUFFER_SIZE) {
+      // Start playback once initial buffer is filled
+      if (!bufferReady.current && frameBuffer.current.length >= BUFFER_FILL_SIZE) {
         bufferReady.current = true;
       }
     }
