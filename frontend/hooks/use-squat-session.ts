@@ -136,8 +136,14 @@ export function useSquatSession() {
   const startSession = useCallback(async () => {
     setState((s) => ({ ...s, status: "connecting" }));
 
-    // Request camera
+    // Request camera — requires HTTPS on non-localhost (use run.sh which starts HTTPS)
     try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error(
+          "Camera API not available. This usually means the page is served over HTTP instead of HTTPS. " +
+          "On mobile, camera requires a secure context (HTTPS or localhost)."
+        );
+      }
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } },
         audio: false,
@@ -146,8 +152,12 @@ export function useSquatSession() {
         videoRef.current.srcObject = stream;
       }
     } catch (err) {
-      console.error("Camera access denied:", err);
-      setState((s) => ({ ...s, status: "idle" }));
+      console.error("Camera access failed:", err);
+      setState((s) => ({
+        ...s,
+        status: "idle",
+        coachingText: err instanceof Error ? err.message : "Camera access denied",
+      }));
       return;
     }
 

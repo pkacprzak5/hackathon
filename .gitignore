@@ -23,6 +23,7 @@
 # misc
 .DS_Store
 *.pem
+.certs/
 
 # debug
 npm-debug.log*
@@ -45,3 +46,5 @@ next-env.d.ts
 *.task
 sessions/
 squat_coach/models/checkpoints/
+__pycache__/
+*.pyc
