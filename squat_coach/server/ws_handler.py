@@ -10,21 +10,18 @@ from fastapi import WebSocket, WebSocketDisconnect
 
 from squat_coach.server.pipeline import SquatCoachPipeline
 from squat_coach.server.delta import DeltaCompressor
+from squat_coach.server.stream import FrameStore
 
 logger = logging.getLogger("squat_coach.ws")
 
 
-async def session_handler(websocket: WebSocket) -> None:
+async def session_handler(websocket: WebSocket, frame_store: FrameStore) -> None:
     """Handle one client session over WebSocket.
 
     Protocol:
     - Client sends: binary JPEG frames at ~24fps
-    - Server sends: binary JPEG (skeleton rendered on frame) + JSON text (data)
-
-    Processing is CPU-bound (MediaPipe), so we:
-    1. Run process_frame in a thread pool (doesn't block event loop)
-    2. Always process the latest frame (skip stale queued frames)
-    3. Send results back immediately
+    - Server sends: JSON text only (calibration, frame data, rep events, coaching)
+    - Rendered frames (with skeleton) go to the MJPEG /stream endpoint via frame_store
     """
     await websocket.accept()
     logger.info("Client connected")
@@ -33,13 +30,12 @@ async def session_handler(websocket: WebSocket) -> None:
     delta = DeltaCompressor()
     loop = asyncio.get_event_loop()
 
-    # Latest frame buffer — always overwritten, so we process the most recent
     latest_frame: bytes | None = None
     frame_event = asyncio.Event()
     running = True
 
     async def receive_loop():
-        """Continuously receive frames and store the latest one."""
+        """Continuously receive frames, keep only the latest."""
         nonlocal latest_frame, running
         try:
             while running:
@@ -54,7 +50,7 @@ async def session_handler(websocket: WebSocket) -> None:
             frame_event.set()
 
     async def process_loop():
-        """Process the latest frame and send results."""
+        """Process latest frame, push rendered result to frame_store, send JSON data."""
         nonlocal latest_frame, running
         try:
             while running:
@@ -68,7 +64,6 @@ async def session_handler(websocket: WebSocket) -> None:
                 if jpeg_bytes is None:
                     continue
 
-                # Decode frame
                 frame = cv2.imdecode(
                     np.frombuffer(jpeg_bytes, np.uint8), cv2.IMREAD_COLOR
                 )
@@ -82,16 +77,16 @@ async def session_handler(websocket: WebSocket) -> None:
                     None, pipeline.process_frame, frame, timestamp
                 )
 
-                # Calibration phase — only JSON
+                # Calibration phase — JSON only
                 if result.calibration is not None:
                     await websocket.send_json(result.calibration.to_dict())
                     continue
 
-                # Send rendered frame with skeleton as binary
+                # Push rendered frame to MJPEG stream
                 if result.rendered_jpeg is not None:
-                    await websocket.send_bytes(result.rendered_jpeg)
+                    frame_store.put(result.rendered_jpeg)
 
-                # Send frame data as JSON (for stats display)
+                # Send frame data as JSON
                 compressed = delta.compress(result)
                 await websocket.send_json({"type": "frame", "data": compressed})
 
@@ -105,7 +100,7 @@ async def session_handler(websocket: WebSocket) -> None:
                         "coaching_text": result.rep.coaching_text,
                     })
 
-                # Gemini coaching text (arrives async from background thread)
+                # Gemini coaching (arrives async from background thread)
                 if result.coaching_text is not None:
                     await websocket.send_json({
                         "type": "coaching",
@@ -121,7 +116,6 @@ async def session_handler(websocket: WebSocket) -> None:
             pipeline.cleanup()
             logger.info("Client disconnected")
 
-    # Run receive and process concurrently
     await asyncio.gather(
         receive_loop(),
         process_loop(),

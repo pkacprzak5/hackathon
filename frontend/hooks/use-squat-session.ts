@@ -31,13 +31,13 @@ export function useSquatSession() {
   });
 
   const videoRef = useRef<HTMLVideoElement>(null);
-  const renderedRef = useRef<HTMLImageElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const captureIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const offscreenRef = useRef<HTMLCanvasElement | null>(null);
 
-  const handleJsonMessage = useCallback((data: string) => {
-    const msg: ServerMessage = JSON.parse(data);
+  const handleMessage = useCallback((event: MessageEvent) => {
+    // All messages are JSON text now (no binary)
+    const msg: ServerMessage = JSON.parse(event.data);
 
     switch (msg.type) {
       case "calibration":
@@ -84,27 +84,6 @@ export function useSquatSession() {
         break;
     }
   }, []);
-
-  const handleBinaryFrame = useCallback((data: Blob) => {
-    // Display the server-rendered frame (with skeleton overlay) in the <img>
-    const img = renderedRef.current;
-    if (!img) return;
-    const url = URL.createObjectURL(data);
-    const prev = img.src;
-    img.src = url;
-    // Revoke the previous blob URL to avoid memory leak
-    if (prev && prev.startsWith("blob:")) {
-      URL.revokeObjectURL(prev);
-    }
-  }, []);
-
-  const handleMessage = useCallback((event: MessageEvent) => {
-    if (event.data instanceof Blob) {
-      handleBinaryFrame(event.data);
-    } else {
-      handleJsonMessage(event.data);
-    }
-  }, [handleBinaryFrame, handleJsonMessage]);
 
   const startCapture = useCallback(() => {
     const video = videoRef.current;
@@ -162,7 +141,6 @@ export function useSquatSession() {
 
     const wsUrl = process.env.NEXT_PUBLIC_ANALYSIS_WS_URL || "ws://localhost:8000/ws/session";
     const ws = new WebSocket(wsUrl);
-    ws.binaryType = "blob"; // receive binary frames as Blob
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -213,10 +191,17 @@ export function useSquatSession() {
     };
   }, []);
 
+  // Build the MJPEG stream URL from the WS URL
+  const baseUrl = (process.env.NEXT_PUBLIC_ANALYSIS_WS_URL || "ws://localhost:8000/ws/session")
+    .replace("wss://", "https://")
+    .replace("ws://", "http://")
+    .replace("/ws/session", "");
+  const streamUrl = `${baseUrl}/stream`;
+
   return {
     state,
     videoRef,
-    renderedRef,
+    streamUrl,
     startSession,
     endSession,
   };

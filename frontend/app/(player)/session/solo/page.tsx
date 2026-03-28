@@ -12,7 +12,7 @@ import type { Insight } from "@/lib/types";
 
 export default function SoloSessionPage() {
   const router = useRouter();
-  const { state, videoRef, renderedRef, startSession, endSession } = useSquatSession();
+  const { state, videoRef, streamUrl, startSession, endSession } = useSquatSession();
   const [sessionTime, setSessionTime] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -106,7 +106,7 @@ export default function SoloSessionPage() {
 
       {/* Video feed */}
       <div className="relative mx-4 aspect-[3/4] overflow-hidden rounded-xl bg-camera-bg">
-        {/* Hidden video element — only used to capture frames for the server */}
+        {/* Hidden video — captures camera frames to send to server */}
         <video
           ref={videoRef}
           autoPlay
@@ -115,11 +115,12 @@ export default function SoloSessionPage() {
           className={state.status === "active" ? "hidden" : "h-full w-full object-cover"}
         />
 
-        {/* Server-rendered frame with skeleton overlay */}
+        {/* MJPEG stream from server — skeleton rendered on frames, continuous video */}
         {state.status === "active" && (
+          // eslint-disable-next-line @next/next/no-img-element
           <img
-            ref={renderedRef}
-            alt=""
+            src={streamUrl}
+            alt="Squat analysis"
             className="h-full w-full object-cover"
           />
         )}
@@ -129,7 +130,7 @@ export default function SoloSessionPage() {
           <CalibrationOverlay progress={state.calibrationProgress} />
         )}
 
-        {/* Idle state: start button */}
+        {/* Idle state */}
         {state.status === "idle" && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/40">
             <button
@@ -207,7 +208,7 @@ export default function SoloSessionPage() {
         </div>
       </div>
 
-      {/* Bottom controls */}
+      {/* End session button */}
       {state.status === "active" && (
         <div className="flex items-center justify-center px-4 py-4">
           <button
