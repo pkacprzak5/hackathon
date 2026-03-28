@@ -167,7 +167,7 @@ def send_to_gemini_async(
                 contents=prompt,
                 config={
                     "system_instruction": _SYSTEM_INSTRUCTION,
-                    "max_output_tokens": 80,
+                    "max_output_tokens": 150,
                     "temperature": 0.9,
                 },
             )

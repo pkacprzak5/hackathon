@@ -21,16 +21,19 @@ def compute_trunk_control_score(
 ) -> float:
     """Score trunk stability through the rep.
 
-    Based on: how much torso angle varied and max deviation from baseline.
+    torso_variance: variance of frame-to-frame angle CHANGES (jitter).
+        A smooth squat has near-zero jitter. Wobbly trunk has high jitter.
+    max_forward_lean: peak torso angle during the rep.
+        Up to ~45° forward lean is normal for a squat. Only penalize beyond that.
     """
-    # Variance penalty: 0 variance = perfect, >15 = 0 points
-    var_score = max(0.0, 100.0 - (torso_variance / 15.0) * 100.0)
+    # Jitter penalty: variance of diffs. <2 = smooth, >10 = very wobbly
+    var_score = max(0.0, 100.0 - (torso_variance / 10.0) * 100.0)
 
-    # Lean penalty: deviation from baseline
-    lean_deviation = max(0.0, max_forward_lean - baseline_angle)
-    lean_score = max(0.0, 100.0 - (lean_deviation / 30.0) * 100.0)
+    # Lean penalty: only penalize excessive lean (>45° from baseline is a lot)
+    lean_deviation = max(0.0, max_forward_lean - baseline_angle - 35.0)  # 35° lean is normal
+    lean_score = max(0.0, 100.0 - (lean_deviation / 25.0) * 100.0)
 
-    return 0.5 * var_score + 0.5 * lean_score
+    return 0.4 * var_score + 0.6 * lean_score
 
 
 def compute_posture_stability_score(

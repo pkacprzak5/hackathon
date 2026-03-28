@@ -30,8 +30,13 @@ def compute_side_view_features(
     vertical = np.array([0.0, 1.0, 0.0])
     forward_lean = angle_between_vectors(trunk_vec, vertical)
 
-    # Trunk stability: variance of torso angle over recent window
-    trunk_stability = float(np.var(trunk_stability_window)) if len(trunk_stability_window) > 1 else 0.0
+    # Trunk stability: variance of frame-to-frame CHANGES in torso angle
+    # This measures jitter/wobble, not the natural range of motion during a squat
+    if len(trunk_stability_window) > 2:
+        diffs = np.diff(trunk_stability_window)
+        trunk_stability = float(np.var(diffs))
+    else:
+        trunk_stability = 0.0
 
     # Ankle/shin angle: dorsiflexion proxy
     ankle_shin_angle = angle_at_joint(lm[LEFT_KNEE], lm[LEFT_ANKLE], lm[LEFT_FOOT_INDEX])

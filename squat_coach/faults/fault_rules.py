@@ -52,9 +52,10 @@ def check_rounded_back(features: dict, config: dict) -> Optional[FaultDetection]
 
 def check_unstable_torso(features: dict, config: dict) -> Optional[FaultDetection]:
     stability = features.get("trunk_stability", 0.0)
-    threshold = config.get("variance_threshold", 8.0)
+    # trunk_stability is now variance of frame-to-frame diffs, so values are much smaller
+    threshold = config.get("variance_threshold", 5.0)
     if stability > threshold:
-        severity = min(stability / 20.0, 1.0)
+        severity = min(stability / 15.0, 1.0)
         return FaultDetection(
             fault_type=FaultType.UNSTABLE_TORSO,
             severity=severity,
