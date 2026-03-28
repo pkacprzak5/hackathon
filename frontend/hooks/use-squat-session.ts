@@ -10,10 +10,15 @@ import type {
 } from "@/lib/squat-types";
 import { speakCoaching } from "@/lib/tts";
 
+// Portrait orientation, low res for speed
 const CAPTURE_INTERVAL = 42; // ms, ~24fps
-const CAPTURE_WIDTH = 640;
-const CAPTURE_HEIGHT = 480;
-const JPEG_QUALITY = 0.7;
+const CAPTURE_WIDTH = 360;
+const CAPTURE_HEIGHT = 640;
+const JPEG_QUALITY = 0.5;
+
+// Frame buffer — adds ~2-5 frames of latency for smooth playback
+const BUFFER_SIZE = 3;
+const PLAYBACK_INTERVAL = 42; // ms, ~24fps playback
 
 export function useSquatSession() {
   const [state, setState] = useState<SquatSessionState>({
@@ -34,8 +39,13 @@ export function useSquatSession() {
   const renderedImgRef = useRef<HTMLImageElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const captureIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const playbackIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const offscreenRef = useRef<HTMLCanvasElement | null>(null);
   const prevBlobUrl = useRef<string | null>(null);
+
+  // Frame buffer: queue of blob URLs waiting to be displayed
+  const frameBuffer = useRef<Blob[]>([]);
+  const bufferReady = useRef(false);
 
   const handleJsonMessage = useCallback((text: string) => {
     const msg: ServerMessage = JSON.parse(text);
@@ -88,24 +98,46 @@ export function useSquatSession() {
 
   const handleMessage = useCallback((event: MessageEvent) => {
     if (typeof event.data === "string") {
-      // JSON text message (data)
       handleJsonMessage(event.data);
     } else if (event.data instanceof Blob) {
-      // Binary message (rendered frame from server)
+      // Push frame into buffer
+      frameBuffer.current.push(event.data);
+
+      // Drop oldest frames if buffer grows too large (keep max ~8 frames)
+      while (frameBuffer.current.length > BUFFER_SIZE * 2) {
+        frameBuffer.current.shift();
+      }
+
+      // Mark buffer as ready once we have enough frames
+      if (!bufferReady.current && frameBuffer.current.length >= BUFFER_SIZE) {
+        bufferReady.current = true;
+      }
+    }
+  }, [handleJsonMessage]);
+
+  // Playback loop — pulls frames from buffer at steady rate
+  const startPlayback = useCallback(() => {
+    if (playbackIntervalRef.current) return;
+
+    playbackIntervalRef.current = setInterval(() => {
+      if (!bufferReady.current) return;
+
+      const blob = frameBuffer.current.shift();
+      if (!blob) return;
+
       const img = renderedImgRef.current;
       if (!img) return;
 
-      const url = URL.createObjectURL(event.data);
+      const url = URL.createObjectURL(blob);
       img.onload = () => {
-        // Revoke previous URL after the new image has loaded
         if (prevBlobUrl.current) {
           URL.revokeObjectURL(prevBlobUrl.current);
         }
         prevBlobUrl.current = url;
       };
       img.src = url;
-    }
-  }, [handleJsonMessage]);
+    }, PLAYBACK_INTERVAL);
+  }, []);
 
   const startCapture = useCallback(() => {
     const video = videoRef.current;
@@ -123,7 +155,7 @@ export function useSquatSession() {
 
     captureIntervalRef.current = setInterval(() => {
       if (ws.readyState !== WebSocket.OPEN) return;
-      if (video.readyState < 2) return; // video not ready yet
+      if (video.readyState < 2) return;
       ctx.drawImage(video, 0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT);
       offscreen.toBlob(
         (blob) => {
@@ -133,7 +165,10 @@ export function useSquatSession() {
         JPEG_QUALITY,
       );
     }, CAPTURE_INTERVAL);
-  }, []);
+
+    // Start the playback loop too
+    startPlayback();
+  }, [startPlayback]);
 
   const startSession = useCallback(async () => {
     setState((s) => ({ ...s, status: "connecting" }));
@@ -146,12 +181,16 @@ export function useSquatSession() {
         );
       }
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } },
+        video: {
+          facingMode: "environment",
+          width: { ideal: 640 },
+          height: { ideal: 1136 },
+          aspectRatio: { ideal: 9 / 16 },
+        },
         audio: false,
       });
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        // Wait for video to actually start playing
         await new Promise<void>((resolve) => {
           const v = videoRef.current!;
           if (v.readyState >= 2) { resolve(); return; }
@@ -168,7 +207,6 @@ export function useSquatSession() {
       return;
     }
 
-    // Connect WebSocket
     const wsUrl = process.env.NEXT_PUBLIC_ANALYSIS_WS_URL || "ws://localhost:8000/ws/session";
     const ws = new WebSocket(wsUrl);
     ws.binaryType = "blob";
@@ -183,6 +221,7 @@ export function useSquatSession() {
     ws.onclose = (e) => {
       console.log("WebSocket closed:", e.code, e.reason);
       if (captureIntervalRef.current) clearInterval(captureIntervalRef.current);
+      if (playbackIntervalRef.current) clearInterval(playbackIntervalRef.current);
     };
     ws.onerror = (e) => {
       console.error("WebSocket error:", e);
@@ -203,6 +242,10 @@ export function useSquatSession() {
       clearInterval(captureIntervalRef.current);
       captureIntervalRef.current = null;
     }
+    if (playbackIntervalRef.current) {
+      clearInterval(playbackIntervalRef.current);
+      playbackIntervalRef.current = null;
+    }
     if (wsRef.current) {
       wsRef.current.close();
       wsRef.current = null;
@@ -216,12 +259,15 @@ export function useSquatSession() {
       URL.revokeObjectURL(prevBlobUrl.current);
       prevBlobUrl.current = null;
     }
+    frameBuffer.current = [];
+    bufferReady.current = false;
     setState((s) => ({ ...s, status: "ended" }));
   }, []);
 
   useEffect(() => {
     return () => {
       if (captureIntervalRef.current) clearInterval(captureIntervalRef.current);
+      if (playbackIntervalRef.current) clearInterval(playbackIntervalRef.current);
       if (wsRef.current) wsRef.current.close();
       if (videoRef.current?.srcObject) {
         const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
