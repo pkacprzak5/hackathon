@@ -19,7 +19,7 @@ export function WeeklyChart({ data = DEFAULT_DATA, className }: WeeklyChartProps
   const maxVal = Math.max(...data.map((d) => d.value), 1);
 
   return (
-    <div className={cn("rounded-2xl bg-bg-card p-4 ring-1 ring-border-light", className)}>
+    <div className={cn("rounded-2xl bg-bg-card p-4", className)}>
       <p className="mb-3 text-sm font-bold text-text-primary">This Week</p>
       <div className="flex items-end gap-2">
         {data.map((d, i) => {

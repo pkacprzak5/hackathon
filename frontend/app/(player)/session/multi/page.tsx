@@ -41,7 +41,7 @@ export default function MultiSessionPage() {
 
       {/* Joint comparison */}
       <div className="px-4 pt-3">
-        <div className="rounded-2xl bg-bg-card p-3 ring-1 ring-border-light">
+        <div className="rounded-2xl bg-bg-card p-3 ">
           <p className="mb-2 text-xs font-bold text-text-primary">Joint Comparison</p>
           {["Knee", "Back", "Hip"].map((joint) => (
             <div key={joint} className="mb-2">

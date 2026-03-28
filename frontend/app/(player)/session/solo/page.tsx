@@ -215,7 +215,7 @@ export default function SoloSessionPage() {
         <div className="flex items-center justify-center px-4 py-4">
           <button
             onClick={handleEnd}
-            className="flex items-center gap-2 rounded-2xl bg-error px-6 py-3 text-sm font-semibold text-white"
+            className="flex h-[52px] w-full items-center justify-center gap-2 rounded-[26px] bg-linear-to-r from-gradient-start to-gradient-end text-base font-semibold text-white"
           >
             <Square className="h-4 w-4" />
             End Session
