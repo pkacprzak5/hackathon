@@ -115,10 +115,24 @@ export function useSquatSession() {
     }
   }, [handleJsonMessage]);
 
-  // Draw a frame onto the display canvas, center-cropped to fit
+  // Draw a frame onto the display canvas, center-cropped to fit.
+  // Canvas dimensions are set once (first frame) — never reset mid-stream
+  // because setting canvas.width/height clears the pixel buffer.
+  const canvasSized = useRef(false);
+
   const drawFrameToCanvas = useCallback((img: HTMLImageElement) => {
     const canvas = renderedCanvasRef.current;
     if (!canvas) return;
+
+    // Size canvas to its CSS layout size, but only once
+    if (!canvasSized.current) {
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        canvas.width = rect.width;
+        canvas.height = rect.height;
+        canvasSized.current = true;
+      }
+    }
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
@@ -128,9 +142,9 @@ export function useSquatSession() {
     const iw = img.naturalWidth;
     const ih = img.naturalHeight;
 
-    if (iw === 0 || ih === 0) return;
+    if (cw === 0 || ch === 0 || iw === 0 || ih === 0) return;
 
-    // Calculate cover crop (like object-cover but manual)
+    // Center-crop: scale to cover, then draw the center portion
     const scale = Math.max(cw / iw, ch / ih);
     const sw = cw / scale;
     const sh = ch / scale;

@@ -120,14 +120,7 @@ export default function SoloSessionPage() {
 
         {/* Server-rendered frames from buffer — fully covers video when active */}
         <canvas
-          ref={(node) => {
-            (renderedCanvasRef as React.MutableRefObject<HTMLCanvasElement | null>).current = node;
-            if (node && containerRef.current) {
-              const rect = containerRef.current.getBoundingClientRect();
-              node.width = rect.width;
-              node.height = rect.height;
-            }
-          }}
+          ref={renderedCanvasRef}
           className={`absolute inset-0 z-10 h-full w-full bg-black ${
             state.status === "active" ? "" : "hidden"
           }`}
