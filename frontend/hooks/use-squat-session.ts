@@ -51,17 +51,11 @@ export function useSquatSession() {
   const isReady = useRef(false);
   const framesReceived = useRef(0);
 
-  const handleMessage = useCallback((event: MessageEvent) => {
-    if (typeof event.data !== "string") {
-      console.log("Non-string message received:", typeof event.data, event.data);
-      return;
-    }
-
+  const processMessage = useCallback((text: string) => {
     let msg;
     try {
-      msg = JSON.parse(event.data);
-    } catch (e) {
-      console.log("Failed to parse message, len:", event.data.length, "first 30:", event.data.substring(0, 30));
+      msg = JSON.parse(text);
+    } catch {
       return;
     }
 
@@ -126,6 +120,15 @@ export function useSquatSession() {
         break;
     }
   }, []);
+
+  // Handle WebSocket messages — both string and Blob (large messages arrive as Blob over WSS)
+  const handleMessage = useCallback((event: MessageEvent) => {
+    if (typeof event.data === "string") {
+      processMessage(event.data);
+    } else if (event.data instanceof Blob) {
+      event.data.text().then(processMessage);
+    }
+  }, [processMessage]);
 
   // Display frames from buffer at steady 25fps — exactly like TrafficTracking
   const startDisplay = useCallback(() => {
