@@ -134,7 +134,7 @@ class SquatCoachApp:
         last_rep_score: float = 0.0
         best_rep_score: float = 0.0
         all_rep_scores: list[float] = []
-        rep_score_frozen = False  # Once we hit bottom, freeze the live score
+        live_score_ema: float = 50.0  # Smoothed live score to prevent jumps
 
         logger.info("Starting Squat Coach in %s mode", self._mode)
 
@@ -262,28 +262,22 @@ class SquatCoachApp:
                                 prev_phase.value, phase.value,
                                 features.get("primary_knee_angle", 0))
 
-                # Track per-rep extremes during descent only
-                cur_knee = features.get("primary_knee_angle", 180)
-                if phase == Phase.DESCENT and not rep_score_frozen:
-                    rep_min_knee = min(rep_min_knee, cur_knee)
+                # Track per-rep extremes throughout the whole rep
+                if phase in (Phase.DESCENT, Phase.BOTTOM, Phase.ASCENT):
+                    rep_min_knee = min(rep_min_knee, features.get("primary_knee_angle", 180))
                     rep_max_torso = max(rep_max_torso, features.get("torso_inclination_deg", 0))
                     rep_max_head_offset = max(rep_max_head_offset, features.get("head_to_trunk_offset", 0))
                     rep_features_snapshot = dict(features)
-                    # Live depth score while going down
+
+                    # Live score — smoothed with EMA so it doesn't jump around
                     live_depth = compute_depth_score(rep_min_knee, ideal_ref.target_knee_angle if ideal_ref else 90)
-                    session.current_score = live_depth
-
-                # Freeze score once knee starts coming back up (even if phase detector is slow)
-                if not rep_score_frozen and rep_min_knee < 160 and cur_knee > rep_min_knee + 10:
-                    rep_score_frozen = True
-
-                # Also freeze on phase transitions to bottom/ascent
-                if phase in (Phase.BOTTOM, Phase.ASCENT) and not rep_score_frozen:
-                    rep_score_frozen = True
-
-                # Unfreeze on new rep (back to top)
-                if phase == Phase.TOP:
-                    rep_score_frozen = False
+                    raw_live = live_depth
+                    # Smooth: score can only drop slowly (alpha=0.15), rises faster (alpha=0.4)
+                    if raw_live < live_score_ema:
+                        live_score_ema = 0.85 * live_score_ema + 0.15 * raw_live  # slow drop
+                    else:
+                        live_score_ema = 0.6 * live_score_ema + 0.4 * raw_live   # faster rise
+                    session.current_score = live_score_ema
 
                 # Fault detection
                 fault_config = self._scoring_config.get("faults", {}).get("thresholds", {})
@@ -398,7 +392,7 @@ class SquatCoachApp:
                     rep_min_knee = 180.0
                     rep_max_torso = 0.0
                     rep_max_head_offset = 0.0
-                    rep_score_frozen = False
+                    live_score_ema = session.current_score  # carry over for smooth transition
 
                 # Terminal frame logging (throttled)
                 now = time.monotonic()
