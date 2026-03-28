@@ -107,13 +107,13 @@ export default function SoloSessionPage() {
 
       {/* Video feed */}
       <div ref={containerRef} className="relative mx-4 aspect-[3/4] overflow-hidden rounded-xl bg-camera-bg">
-        {/* Live camera — always active for frame capture, hidden behind canvas */}
+        {/* Camera capture only — never visible, positioned offscreen to keep stream active */}
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted
-          className="absolute inset-0 h-full w-full object-cover"
+          className="pointer-events-none absolute -left-[9999px] h-1 w-1 opacity-0"
         />
 
         {/* Server-rendered frames drawn center-cropped onto canvas */}

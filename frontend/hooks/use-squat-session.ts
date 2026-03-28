@@ -152,14 +152,7 @@ export function useSquatSession() {
 
       const elapsed = timestamp - lastDisplayTime.current;
 
-      // Adaptive timing based on buffer level:
-      // Buffer full (>6): play slightly faster to drain (35ms)
-      // Buffer low (<3): play slightly slower to let it refill (50ms)
-      // Normal: 40ms (25fps)
-      const bufLen = frameBuffer.current.length;
-      const targetInterval = bufLen > 6 ? 35 : bufLen < 3 ? 50 : PLAYBACK_INTERVAL;
-
-      if (elapsed >= targetInterval) {
+      if (elapsed >= PLAYBACK_INTERVAL) {
         const blob = frameBuffer.current.shift();
         if (blob) {
           const url = URL.createObjectURL(blob);
