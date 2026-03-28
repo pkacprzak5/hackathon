@@ -9,7 +9,7 @@ export default function ResultsPage() {
   return (
     <div className="flex flex-col items-center bg-bg-surface">
       {/* Header */}
-      <div className="w-full bg-gradient-to-r from-gradient-start to-gradient-end px-5 pb-16 pt-12 text-center">
+      <div className="w-full bg-linear-to-r from-gradient-start to-gradient-end px-5 pb-16 pt-12 text-center">
         <p className="text-sm text-white/70">Session Complete</p>
         <h1 className="text-2xl font-bold text-white">Great Work!</h1>
       </div>
@@ -31,7 +31,7 @@ export default function ResultsPage() {
             </div>
           </div>
 
-          <button className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-gradient-start to-gradient-end py-3 text-sm font-semibold text-white">
+          <button className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-linear-to-r from-gradient-start to-gradient-end py-3 text-sm font-semibold text-white">
             <Share2 className="h-4 w-4" />
             Share Results
           </button>

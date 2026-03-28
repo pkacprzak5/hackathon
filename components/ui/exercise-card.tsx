@@ -25,7 +25,7 @@ export function ExerciseCard({ name, difficulty, reps, className, onClick }: Exe
         className
       )}
     >
-      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-gradient-start/20 to-gradient-end/20">
+      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-linear-to-br from-gradient-start/20 to-gradient-end/20">
         {name === "Squat" ? (
           <Target className="h-6 w-6 text-gradient-start" />
         ) : (

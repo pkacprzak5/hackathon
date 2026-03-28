@@ -61,7 +61,7 @@ export default function PlayerLayout({ children }: { children: ReactNode }) {
                   {tab.label}
                 </span>
                 {isActive && (
-                  <div className="h-1 w-4 rounded-full bg-gradient-to-r from-gradient-start to-gradient-end" />
+                  <div className="h-1 w-4 rounded-full bg-linear-to-r from-gradient-start to-gradient-end" />
                 )}
               </button>
             );

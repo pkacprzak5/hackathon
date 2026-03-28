@@ -16,7 +16,7 @@ export default function HomePage() {
   return (
     <div className="flex flex-col">
       {/* Gradient header */}
-      <div className="bg-gradient-to-r from-gradient-start to-gradient-end px-5 pb-16 pt-12">
+      <div className="bg-linear-to-r from-gradient-start to-gradient-end px-5 pb-16 pt-12">
         <p className="text-sm text-white/80">Welcome back,</p>
         <h1 className="text-2xl font-bold text-white">{username}</h1>
       </div>
@@ -40,7 +40,7 @@ export default function HomePage() {
       <div className="px-5 pt-5">
         <button
           onClick={() => router.push("/session/multi")}
-          className="flex w-full items-center gap-3 rounded-2xl bg-gradient-to-r from-gradient2-start to-gradient2-end p-4"
+          className="flex w-full items-center gap-3 rounded-2xl bg-linear-to-r from-gradient2-start to-gradient2-end p-4"
         >
           <Users className="h-5 w-5 text-white" />
           <div className="flex-1 text-left">

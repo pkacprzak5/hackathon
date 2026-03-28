@@ -12,7 +12,7 @@ export function CoachInsights({ insights }: CoachInsightsProps) {
     <div className="flex flex-col">
       <div className="flex items-center gap-2 border-b border-border-light px-4 py-3">
         <p className="text-sm font-bold text-text-primary">AI Insights</p>
-        <span className="rounded-full bg-gradient-to-r from-gradient-start to-gradient-end px-2 py-0.5 text-[9px] font-semibold text-white">
+        <span className="rounded-full bg-linear-to-r from-gradient-start to-gradient-end px-2 py-0.5 text-[9px] font-semibold text-white">
           Live
         </span>
       </div>

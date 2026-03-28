@@ -13,7 +13,7 @@ export default function LeaderboardPage() {
 
   return (
     <div className="flex flex-col bg-bg-surface">
-      <div className="bg-gradient-to-r from-gradient-start to-gradient-end px-5 pb-8 pt-12">
+      <div className="bg-linear-to-r from-gradient-start to-gradient-end px-5 pb-8 pt-12">
         <h1 className="text-2xl font-bold text-white">Leaderboard</h1>
         <p className="text-sm text-white/70">Current session rankings</p>
       </div>

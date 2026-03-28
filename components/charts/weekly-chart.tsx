@@ -36,7 +36,7 @@ export function WeeklyChart({ data = DEFAULT_DATA, className }: WeeklyChartProps
                   "w-full rounded-t-lg transition-all",
                   d.value > 0
                     ? isToday
-                      ? "bg-gradient-to-t from-gradient-start to-gradient-end"
+                      ? "bg-linear-to-t from-gradient-start to-gradient-end"
                       : "bg-gradient-start/30"
                     : "bg-border-light"
                 )}

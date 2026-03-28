@@ -21,12 +21,12 @@ export default function EntryPage() {
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center bg-bg-surface px-4">
       {/* Gradient header accent */}
-      <div className="fixed top-0 left-0 h-48 w-full bg-gradient-to-r from-gradient-start to-gradient-end opacity-20 blur-3xl" />
+      <div className="fixed top-0 left-0 h-48 w-full bg-linear-to-r from-gradient-start to-gradient-end opacity-20 blur-3xl" />
 
       <div className="relative z-10 flex w-full max-w-sm flex-col items-center gap-8">
         {/* Logo */}
         <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-gradient-start to-gradient-end">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-linear-to-br from-gradient-start to-gradient-end">
             <Dumbbell className="h-6 w-6 text-white" />
           </div>
           <h1 className="text-3xl font-bold text-text-primary">GymAI</h1>
@@ -55,7 +55,7 @@ export default function EntryPage() {
               onClick={() => handleJoin("player")}
               disabled={!username.trim()}
               className={cn(
-                "w-full rounded-2xl bg-gradient-to-r from-gradient-start to-gradient-end py-3 text-sm font-semibold text-white transition-opacity",
+                "w-full rounded-2xl bg-linear-to-r from-gradient-start to-gradient-end py-3 text-sm font-semibold text-white transition-opacity",
                 username.trim() ? "hover:opacity-90" : "opacity-40 cursor-not-allowed"
               )}
             >

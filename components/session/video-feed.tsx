@@ -32,7 +32,7 @@ export function VideoFeed({ stream, name, score, color = "#8B5CF6", className }:
           className="h-full w-full object-cover"
         />
       ) : (
-        <div className="flex h-full w-full items-center justify-center bg-gradient-to-b from-camera-bg to-camera-bg-dark">
+        <div className="flex h-full w-full items-center justify-center bg-linear-to-b from-camera-bg to-camera-bg-dark">
           <svg width="80" height="160" viewBox="0 0 80 160" className="opacity-40">
             <circle cx="40" cy="20" r="16" fill={color} opacity="0.4" />
             <rect x="37" y="36" width="6" height="50" rx="3" fill={color} opacity="0.6" />

@@ -26,7 +26,7 @@ export default function CoachDashboard() {
   return (
     <div className="flex h-screen flex-col">
       {/* Top bar */}
-      <header className="flex h-14 items-center justify-between bg-gradient-to-r from-gradient-start to-gradient-end px-6">
+      <header className="flex h-14 items-center justify-between bg-linear-to-r from-gradient-start to-gradient-end px-6">
         <div className="flex items-center gap-3">
           <Dumbbell className="h-5 w-5 text-white" />
           <span className="text-lg font-bold text-white">GymAI</span>

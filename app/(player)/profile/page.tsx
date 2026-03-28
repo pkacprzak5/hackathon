@@ -32,7 +32,7 @@ export default function ProfilePage() {
       {/* User card */}
       <div className="px-5">
         <div className="flex items-center gap-4 rounded-3xl bg-bg-card p-5 ring-1 ring-border-light">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-gradient-start to-gradient-end text-xl font-bold text-white">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-linear-to-br from-gradient-start to-gradient-end text-xl font-bold text-white">
             {username[0]?.toUpperCase()}
           </div>
           <div>
