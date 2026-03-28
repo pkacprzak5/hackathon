@@ -29,7 +29,7 @@ export function AngleChart({
     .join(" ");
 
   return (
-    <div className={cn("rounded-xl bg-bg-card p-3 ring-1 ring-border-light", className)}>
+    <div className={cn("rounded-xl bg-bg-card p-3", className)}>
       <p className="mb-2 text-xs font-semibold text-text-primary">{label}</p>
       <svg viewBox={`0 0 ${width} ${height}`} className="w-full" preserveAspectRatio="none">
         <polyline

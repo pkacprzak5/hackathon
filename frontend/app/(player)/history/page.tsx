@@ -12,41 +12,41 @@ const recentSessions = [
 
 export default function HistoryPage() {
   return (
-    <div className="flex flex-col bg-bg-surface">
+    <div className="flex flex-col bg-bg-primary px-6">
       {/* Header */}
-      <div className="px-5 pt-12 pb-4">
-        <h1 className="text-2xl font-bold text-text-primary">History</h1>
+      <div className="pt-12 pb-4">
+        <h1 className="font-heading text-[28px] font-extrabold text-text-primary">History</h1>
       </div>
 
       {/* Weekly chart */}
-      <div className="px-5">
+      <div>
         <WeeklyChart />
       </div>
 
       {/* Quick stats */}
-      <div className="flex gap-3 px-5 pt-4">
-        <div className="flex-1 rounded-2xl bg-bg-card p-4 ring-1 ring-border-light">
+      <div className="flex gap-4 pt-4">
+        <div className="flex-1 rounded-3xl bg-bg-card p-5">
           <StatBlock label="Avg Score" value="84" valueClassName="text-lg text-gradient-start" />
         </div>
-        <div className="flex-1 rounded-2xl bg-bg-card p-4 ring-1 ring-border-light">
+        <div className="flex-1 rounded-3xl bg-bg-card p-5">
           <StatBlock label="Sessions" value="12" valueClassName="text-lg" />
         </div>
-        <div className="flex-1 rounded-2xl bg-bg-card p-4 ring-1 ring-border-light">
+        <div className="flex-1 rounded-3xl bg-bg-card p-5">
           <StatBlock label="Streak" value="4d" valueClassName="text-lg text-success" />
         </div>
       </div>
 
       {/* Recent sessions */}
-      <div className="px-5 pt-4 pb-4">
+      <div className="pt-4 pb-4">
         <h2 className="mb-3 text-sm font-bold text-text-primary">Recent Sessions</h2>
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-3">
           {recentSessions.map((session, i) => (
-            <div key={i} className="flex items-center gap-3 rounded-2xl bg-bg-card p-4 ring-1 ring-border-light">
+            <div key={i} className="flex items-center gap-3 rounded-3xl bg-bg-card p-5">
               <div className="flex-1">
                 <p className="text-sm font-semibold text-text-primary">{session.exercise}</p>
                 <p className="text-xs text-text-secondary">{session.date} · {session.reps}</p>
               </div>
-              <span className="text-lg font-bold text-gradient-start">{session.score}</span>
+              <span className="font-heading text-xl font-extrabold text-gradient-start">{session.score}</span>
             </div>
           ))}
         </div>

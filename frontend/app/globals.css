@@ -5,16 +5,16 @@
   /* Backgrounds */
   --bg-primary: #FFFFFF;
   --bg-surface: #F4F4F5;
-  --bg-card: #FFFFFF;
-  --bg-elevated: #FAFAFA;
+  --bg-card: #F4F4F5;
+  --bg-elevated: #E4E4E7;
 
   /* Text */
-  --text-primary: #09090B;
+  --text-primary: #18181B;
   --text-secondary: #71717A;
   --text-muted: #A1A1AA;
 
   /* Borders */
-  --border: #E4E4E7;
+  --border: #D4D4D8;
   --border-light: #F4F4F5;
 
   /* Brand gradients */
@@ -24,10 +24,13 @@
   --gradient2-end: #8B5CF6;
 
   /* Semantic */
-  --success: #22C55E;
+  --success: #14B8A6;
   --success-muted: #14B8A6;
   --error: #EF4444;
   --warning: #F59E0B;
+
+  /* Purple soft */
+  --purple-soft: #8B5CF620;
 
   /* Insight backgrounds */
   --insight-error-bg: #FFF5F5;
@@ -83,8 +86,10 @@
   --color-insight-warning-bg: var(--insight-warning-bg);
   --color-camera-bg: var(--camera-bg);
   --color-camera-bg-dark: var(--camera-bg-dark);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-body);
+  --font-heading: var(--font-heading);
   --font-mono: var(--font-geist-mono);
+  --color-purple-soft: var(--purple-soft);
 }
 
 html,
@@ -95,7 +100,7 @@ body {
 }
 
 body {
-  background: var(--bg-surface);
+  background: var(--bg-primary);
   color: var(--text-primary);
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-family: var(--font-body), system-ui, sans-serif;
 }

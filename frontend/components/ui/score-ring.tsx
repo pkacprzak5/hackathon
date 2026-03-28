@@ -18,7 +18,7 @@ export function ScoreRing({ score, size = 120, strokeWidth = 8, className }: Sco
   return (
     <div className={cn("relative inline-flex items-center justify-center", className)}>
       <svg width={size} height={size} className="-rotate-90">
-        <circle cx={center} cy={center} r={radius} fill="none" stroke="currentColor" strokeWidth={strokeWidth} className="text-border-light" />
+        <circle cx={center} cy={center} r={radius} fill="#F4F4F5" stroke="currentColor" strokeWidth={strokeWidth} className="text-border-light dark:fill-[#1A1A2E]" />
         <circle cx={center} cy={center} r={radius} fill="none" stroke="url(#scoreGradient)" strokeWidth={strokeWidth} strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round" />
         <defs>
           <linearGradient id="scoreGradient" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -28,7 +28,7 @@ export function ScoreRing({ score, size = 120, strokeWidth = 8, className }: Sco
         </defs>
       </svg>
       <div className="absolute flex flex-col items-center">
-        <span className="text-3xl font-bold text-text-primary">{score}</span>
+        <span className="font-heading text-5xl font-extrabold text-text-primary">{score}</span>
         <span className="text-xs text-text-secondary">score</span>
       </div>
     </div>

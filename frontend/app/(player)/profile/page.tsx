@@ -24,15 +24,15 @@ export default function ProfilePage() {
   ];
 
   return (
-    <div className="flex flex-col bg-bg-surface">
-      <div className="px-5 pt-12 pb-4">
-        <h1 className="text-2xl font-bold text-text-primary">Profile</h1>
+    <div className="flex flex-col bg-bg-primary px-6">
+      <div className="pt-12 pb-4">
+        <h1 className="font-heading text-[28px] font-extrabold text-text-primary">Profile</h1>
       </div>
 
       {/* User card */}
-      <div className="px-5">
-        <div className="flex items-center gap-4 rounded-3xl bg-bg-card p-5 ring-1 ring-border-light">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-linear-to-br from-gradient-start to-gradient-end text-xl font-bold text-white">
+      <div>
+        <div className="flex items-center gap-4 rounded-3xl bg-bg-card p-5">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-linear-to-br from-gradient-start to-gradient-end text-xl font-bold text-white ring-[3px] ring-white dark:ring-[#1A1A2E]">
             {username[0]?.toUpperCase()}
           </div>
           <div>
@@ -43,17 +43,17 @@ export default function ProfilePage() {
       </div>
 
       {/* Theme toggle */}
-      <div className="px-5 pt-4">
+      <div className="pt-4">
         <ThemeToggle />
       </div>
 
       {/* Menu items */}
-      <div className="flex flex-col gap-2 px-5 pt-4">
+      <div className="flex flex-col gap-2 pt-4">
         {menuItems.map((item) => (
           <button
             key={item.label}
             onClick={() => item.href !== "#" && router.push(item.href)}
-            className="flex items-center gap-3 rounded-2xl bg-bg-card p-4 ring-1 ring-border-light"
+            className="flex items-center gap-3 rounded-2xl bg-bg-card p-4"
           >
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-bg-surface">
               <item.icon className="h-5 w-5 text-text-secondary" />
@@ -65,7 +65,7 @@ export default function ProfilePage() {
       </div>
 
       {/* Logout */}
-      <div className="px-5 pt-4 pb-8">
+      <div className="pt-4 pb-8">
         <button
           onClick={handleLogout}
           className="flex w-full items-center gap-3 rounded-2xl bg-error/10 p-4"

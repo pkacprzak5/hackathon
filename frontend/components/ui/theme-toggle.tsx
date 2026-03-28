@@ -21,7 +21,7 @@ export function ThemeToggle({ className }: { className?: string }) {
     <button
       onClick={() => setTheme(isDark ? "light" : "dark")}
       className={cn(
-        "flex items-center gap-3 rounded-2xl bg-bg-card p-4 ring-1 ring-border-light w-full",
+        "flex items-center gap-3 rounded-2xl bg-bg-card p-4 w-full",
         className
       )}
     >

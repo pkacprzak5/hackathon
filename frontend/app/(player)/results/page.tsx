@@ -1,6 +1,6 @@
 "use client";
 
-import { Home, Share2 } from "lucide-react";
+import { Home, Link2, Save, Share2, Trophy } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -38,18 +38,21 @@ export default function ResultsPage() {
   const timeStr = `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
 
   return (
-    <div className="flex flex-col items-center bg-bg-surface">
+    <div className="flex flex-col items-center bg-bg-primary px-6">
       {/* Header */}
-      <div className="w-full bg-linear-to-r from-gradient-start to-gradient-end px-5 pb-16 pt-12 text-center">
-        <p className="text-sm text-white/70">Session Complete</p>
-        <h1 className="text-2xl font-bold text-white">
+      <div className="flex w-full flex-col items-center pt-12 pb-6">
+        <div className="mb-3 flex h-10 w-10 items-center justify-center">
+          <Trophy className="h-10 w-10 text-gradient-start" />
+        </div>
+        <h1 className="bg-linear-to-r from-gradient-start to-gradient-end bg-clip-text font-heading text-[28px] font-extrabold text-transparent">
           {avgScore >= 80 ? "Great Work!" : avgScore >= 60 ? "Good Effort!" : "Keep Practicing!"}
         </h1>
+        <p className="text-sm text-text-secondary">Session Complete</p>
       </div>
 
       {/* Results card */}
-      <div className="-mt-10 w-full max-w-sm px-5">
-        <div className="flex flex-col items-center rounded-3xl bg-bg-card p-6 shadow-lg ring-1 ring-border-light">
+      <div className="w-full max-w-sm">
+        <div className="flex flex-col items-center rounded-3xl bg-bg-card p-6">
           <ScoreRing score={avgScore} size={140} strokeWidth={10} />
 
           <div className="mt-4 grid w-full grid-cols-3 gap-4">
@@ -94,17 +97,21 @@ export default function ResultsPage() {
             </div>
           )}
 
-          <div className="mt-4 flex w-full gap-2">
+          <div className="mt-4 flex w-full gap-[10px]">
+            <button className="flex h-[44px] flex-1 items-center justify-center gap-2 rounded-[22px] bg-linear-to-r from-gradient-start to-gradient-end text-sm font-semibold text-white">
+              <Share2 className="h-4 w-4" />
+              Share
+            </button>
             <button
               onClick={() => router.push("/home")}
-              className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-bg-surface py-3 text-sm font-semibold text-text-primary ring-1 ring-border-light"
+              className="flex h-[44px] items-center justify-center gap-2 rounded-[22px] border-[1.5px] border-border px-4 text-[13px] font-semibold text-text-primary"
             >
               <Home className="h-4 w-4" />
               Home
             </button>
-            <button className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-linear-to-r from-gradient-start to-gradient-end py-3 text-sm font-semibold text-white">
-              <Share2 className="h-4 w-4" />
-              Share
+            <button className="flex h-[44px] items-center justify-center gap-2 rounded-[22px] border-[1.5px] border-border px-4 text-[13px] font-semibold text-text-primary">
+              <Save className="h-4 w-4" />
+              Save
             </button>
           </div>
         </div>
