@@ -63,6 +63,12 @@ async def session_handler(websocket: WebSocket) -> None:
                     "type": "new_frame",
                     "data": b64,
                 }))
+                if frame_count % 25 == 1:
+                    logger.info("Sent new_frame, b64 len=%d", len(b64))
+            else:
+                if frame_count % 25 == 1:
+                    logger.info("No rendered_jpeg at frame %d, pose detected=%s",
+                                frame_count, result.phase is not None)
 
             # Send data as JSON
             compressed = delta.compress(result)
