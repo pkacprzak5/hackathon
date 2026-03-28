@@ -1,7 +1,12 @@
 """Gemini API integration for spoken coaching feedback.
 
-After each completed rep, sends a structured summary to Gemini
-which returns a natural-language coaching response.
+After each completed rep, sends a compact scoring summary (NOT raw frames
+or pose data) to Gemini, which streams back a 1-2 sentence coaching response.
+
+Uses streaming + piped TTS for lowest perceived latency:
+  1. API call starts in background thread
+  2. Streaming collects the full response (typically < 1s with flash)
+  3. TTS starts immediately after
 
 Setup:
   1. Get API key from https://aistudio.google.com/apikey
@@ -13,52 +18,73 @@ import logging
 import os
 import subprocess
 import threading
-from typing import Optional
+from typing import Optional, Callable
 
 from squat_coach.events.schemas import RepSummaryEvent
 
 logger = logging.getLogger("squat_coach.gemini")
 
-# Background TTS — never blocks the video loop
+# ── TTS (background, never blocks) ──────────────────────────────────────
+
+_say_proc: Optional[subprocess.Popen] = None
 _tts_lock = threading.Lock()
 
 
 def speak(text: str) -> None:
-    """Speak text using macOS 'say' with English voice in a background thread."""
+    """Speak text using macOS 'say' with English voice. Non-blocking."""
+    global _say_proc
+
     def _run():
+        global _say_proc
         with _tts_lock:
             try:
-                subprocess.run(["killall", "say"], capture_output=True)
-                subprocess.run(
+                # Kill previous speech
+                if _say_proc and _say_proc.poll() is None:
+                    _say_proc.terminate()
+                _say_proc = subprocess.Popen(
                     ["say", "-v", "Samantha", "-r", "190", text],
-                    capture_output=True,
-                    timeout=15,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
                 )
+                _say_proc.wait(timeout=15)
             except Exception as e:
                 logger.debug("TTS error: %s", e)
 
     threading.Thread(target=_run, daemon=True).start()
 
-# Lazy-initialized client
+
+# ── Gemini client (lazy singleton) ──────────────────────────────────────
+
 _client = None
+_client_lock = threading.Lock()
+
+# System instruction — sent once, not per request (saves tokens)
+_SYSTEM_INSTRUCTION = (
+    "You are a supportive squat coach. After each rep you get scoring data. "
+    "Reply with exactly 1 short sentence of coaching feedback. "
+    "Be encouraging but honest. Focus on the single most important thing. "
+    "Never use markdown or bullet points — just speak naturally."
+)
 
 
 def _get_client(api_key: str):
-    """Initialize the Gemini client lazily."""
     global _client
-    if _client is None:
-        try:
-            from google import genai
-            _client = genai.Client(api_key=api_key)
-            logger.info("Gemini client initialized")
-        except Exception as e:
-            logger.error("Failed to initialize Gemini client: %s", e)
-            return None
+    with _client_lock:
+        if _client is None:
+            try:
+                from google import genai
+                _client = genai.Client(api_key=api_key)
+                logger.info("Gemini client initialized")
+            except Exception as e:
+                logger.error("Failed to init Gemini: %s", e)
+                return None
     return _client
 
 
+# ── Payload formatting ──────────────────────────────────────────────────
+
 def format_gemini_payload(event: RepSummaryEvent) -> dict:
-    """Format a rep summary into a Gemini-ready payload."""
+    """Format a rep summary into a compact payload."""
     return {
         "exercise": "squat",
         "rep_index": event.rep_index,
@@ -71,45 +97,31 @@ def format_gemini_payload(event: RepSummaryEvent) -> dict:
     }
 
 
-def format_gemini_text_prompt(payload: dict) -> str:
-    """Format payload as a text prompt for Gemini."""
-    scores = payload["scores"]
-    cue = payload["primary_coaching_cue"]
-
-    prompt = (
-        "You are a supportive squat coach giving brief spoken feedback after a rep. "
-        "Keep it to 1-2 short sentences. Be encouraging but honest. "
-        "Focus on the most important thing to improve.\n\n"
-        f"Rep {payload['rep_index']} data:\n"
-        f"- Overall score: {scores.get('rep_quality', 50):.0f}/100\n"
-        f"- Depth score: {scores.get('depth', 50):.0f}/100\n"
-        f"- Trunk control: {scores.get('trunk_control', 50):.0f}/100\n"
-        f"- Posture stability: {scores.get('posture_stability', 50):.0f}/100\n"
-        f"- Movement consistency: {scores.get('movement_consistency', 50):.0f}/100\n"
-    )
+def _build_prompt(payload: dict) -> str:
+    """Build a minimal prompt from the payload. Kept short for speed."""
+    s = payload["scores"]
+    parts = [f"Rep {payload['rep_index']}: {s.get('rep_quality', 50):.0f}/100"]
+    parts.append(f"depth={s.get('depth', 50):.0f} trunk={s.get('trunk_control', 50):.0f} "
+                 f"posture={s.get('posture_stability', 50):.0f} consistency={s.get('movement_consistency', 50):.0f}")
 
     if payload["faults"]:
-        prompt += "Detected faults:\n"
-        for fault in payload["faults"]:
-            prompt += f"  - {fault['type'].replace('_', ' ')} (severity: {fault['severity']:.0%})\n"
+        fault_strs = [f"{f['type'].replace('_', ' ')} ({f['severity']:.0%})" for f in payload["faults"][:2]]
+        parts.append("faults: " + ", ".join(fault_strs))
 
-    if payload["phase_durations"]:
-        d = payload["phase_durations"]
-        prompt += f"- Descent: {d.get('descent_s', 0):.1f}s, Bottom: {d.get('bottom_s', 0):.1f}s, Ascent: {d.get('ascent_s', 0):.1f}s\n"
+    d = payload.get("phase_durations", {})
+    if d:
+        parts.append(f"descent={d.get('descent_s', 0):.1f}s ascent={d.get('ascent_s', 0):.1f}s")
 
-    prompt += f"\nSystem coaching cue: {cue}\n"
-    prompt += "\nGive your brief coaching feedback:"
-
-    return prompt
+    return " | ".join(parts)
 
 
-# Shared state for async Gemini feedback
+# ── Async Gemini call ───────────────────────────────────────────────────
+
 _last_feedback: Optional[str] = None
 _feedback_lock = threading.Lock()
 
 
 def get_last_feedback() -> Optional[str]:
-    """Get the most recent Gemini feedback (thread-safe). Returns None if none yet."""
     with _feedback_lock:
         return _last_feedback
 
@@ -119,12 +131,12 @@ def send_to_gemini_async(
     api_key: str = "",
     model: str = "gemini-2.0-flash",
     speak_enabled: bool = True,
-    on_feedback: Optional[callable] = None,
+    on_feedback: Optional[Callable[[str], None]] = None,
 ) -> None:
-    """Send rep summary to Gemini in a background thread. Never blocks.
+    """Send rep data to Gemini in background thread. Never blocks.
 
-    The API call + TTS all happen off the main thread.
-    Results available via get_last_feedback() or the on_feedback callback.
+    What we send: compact scoring summary (~100 tokens).
+    NOT raw frames, NOT pose landmarks, NOT video data.
     """
     key = api_key or os.environ.get("GEMINI_API_KEY", "")
     if not key:
@@ -133,17 +145,33 @@ def send_to_gemini_async(
     def _run():
         global _last_feedback
         client = _get_client(key)
-        if client is None:
+        if not client:
             return
 
-        prompt = format_gemini_text_prompt(payload)
+        prompt = _build_prompt(payload)
         try:
-            response = client.models.generate_content(
+            # Use streaming for faster first-token
+            response = client.models.generate_content_stream(
                 model=model,
                 contents=prompt,
+                config={
+                    "system_instruction": _SYSTEM_INSTRUCTION,
+                    "max_output_tokens": 60,
+                    "temperature": 0.7,
+                },
             )
-            feedback = response.text.strip()
-            logger.info("Gemini: %s", feedback)
+
+            # Collect streamed chunks
+            chunks = []
+            for chunk in response:
+                if chunk.text:
+                    chunks.append(chunk.text)
+
+            feedback = "".join(chunks).strip()
+            if not feedback:
+                return
+
+            logger.info("GEMINI: %s", feedback)
 
             with _feedback_lock:
                 _last_feedback = feedback
@@ -153,7 +181,8 @@ def send_to_gemini_async(
 
             if speak_enabled:
                 speak(feedback)
+
         except Exception as e:
-            logger.error("Gemini API error: %s", e)
+            logger.error("Gemini error: %s", e)
 
     threading.Thread(target=_run, daemon=True).start()
