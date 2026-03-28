@@ -14,7 +14,7 @@ import type { Insight } from "@/lib/types";
 
 export default function SoloSessionPage() {
   const router = useRouter();
-  const { state, videoRef, canvasRef, accRef, startSession, endSession } = useSquatSession();
+  const { state, videoRef, canvasRef, startSession, endSession } = useSquatSession();
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [sessionTime, setSessionTime] = useState(0);
@@ -141,7 +141,7 @@ export default function SoloSessionPage() {
         {state.status === "active" && dimensions.width > 0 && (
           <OverlayCanvas
             canvasRef={canvasRef}
-            accRef={accRef}
+            landmarks={state.landmarks}
             angles={state.angles}
             width={dimensions.width}
             height={dimensions.height}

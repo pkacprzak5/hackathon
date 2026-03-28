@@ -4,8 +4,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { parseLandmarks } from "@/lib/interpolation";
 import type {
-  Landmark,
-  SquatAngles,
   SquatPhase,
   SquatRepResult,
   SquatSessionState,
@@ -17,12 +15,6 @@ const CAPTURE_INTERVAL = 42; // ms, ~24fps
 const CAPTURE_WIDTH = 640;
 const CAPTURE_HEIGHT = 480;
 const JPEG_QUALITY = 0.7;
-
-interface AccumulatedState {
-  landmarks: Landmark[] | null;
-  prevLandmarks: Landmark[] | null;
-  lastUpdateTime: number;
-}
 
 export function useSquatSession() {
   const [state, setState] = useState<SquatSessionState>({
@@ -44,11 +36,6 @@ export function useSquatSession() {
   const wsRef = useRef<WebSocket | null>(null);
   const captureIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const offscreenRef = useRef<HTMLCanvasElement | null>(null);
-  const accRef = useRef<AccumulatedState>({
-    landmarks: null,
-    prevLandmarks: null,
-    lastUpdateTime: 0,
-  });
 
   const handleMessage = useCallback((event: MessageEvent) => {
     const msg: ServerMessage = JSON.parse(event.data);
@@ -73,11 +60,7 @@ export function useSquatSession() {
           if (data.score !== undefined) next.score = data.score;
           if (data.confidence !== undefined) next.confidence = data.confidence;
           if (data.landmarks) {
-            const parsed = parseLandmarks(data.landmarks);
-            accRef.current.prevLandmarks = accRef.current.landmarks;
-            accRef.current.landmarks = parsed;
-            accRef.current.lastUpdateTime = performance.now();
-            next.landmarks = parsed;
+            next.landmarks = parseLandmarks(data.landmarks);
           }
           return next;
         });
@@ -195,7 +178,6 @@ export function useSquatSession() {
       wsRef.current.close();
       wsRef.current = null;
     }
-    // Stop camera
     if (videoRef.current?.srcObject) {
       const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
       tracks.forEach((t) => t.stop());
@@ -204,7 +186,6 @@ export function useSquatSession() {
     setState((s) => ({ ...s, status: "ended" }));
   }, []);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (captureIntervalRef.current) clearInterval(captureIntervalRef.current);
@@ -220,7 +201,6 @@ export function useSquatSession() {
     state,
     videoRef,
     canvasRef,
-    accRef,
     startSession,
     endSession,
   };
