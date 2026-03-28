@@ -107,18 +107,14 @@ export default function SoloSessionPage() {
 
       {/* Video feed */}
       <div ref={containerRef} className="relative mx-4 aspect-[3/4] overflow-hidden rounded-xl bg-camera-bg">
-        {/* Camera feed — visible during calibration so user can position themselves,
-            offscreen once active (server canvas takes over, but stream stays active for capture) */}
+        {/* Camera feed — always full size (keeps browser rendering frames for capture).
+            Visible during calibration. Canvas covers it when active (z-10). */}
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted
-          className={
-            state.status === "active"
-              ? "pointer-events-none absolute -left-[9999px] h-1 w-1 opacity-0"
-              : "absolute inset-0 h-full w-full object-cover"
-          }
+          className="absolute inset-0 h-full w-full object-cover"
         />
 
         {/* Server-rendered frames drawn center-cropped onto canvas */}
