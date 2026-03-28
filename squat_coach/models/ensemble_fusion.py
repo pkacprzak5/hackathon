@@ -72,7 +72,7 @@ class EnsembleFusion:
         return FusedOutput(
             phase_probs=phase,
             fault_probs=fault,
-            quality_score=float(quality[0]) if quality.size > 0 else 0.5,
+            quality_score=float(quality.item()) if quality.size > 0 else 0.5,
             confidence=confidence,
             model_agreement=agreement,
         )
