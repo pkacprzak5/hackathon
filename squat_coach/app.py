@@ -191,10 +191,10 @@ class SquatCoachApp:
                                 min_phase_duration_s=self._scoring_config["calibration"]["min_phase_duration_s"],
                                 calibrated_knee_angle=cal_result.baseline_knee_angle,
                             )
-                            logger.info("Phase detector: standing knee=%.1f°, descent<%.1f°, bottom<%.1f°",
+                            logger.info("Phase detector: standing knee=%.1f°, descent drop=%.1f°, bottom drop=%.1f°",
                                         cal_result.baseline_knee_angle,
-                                        phase_detector._standing_angle,
-                                        phase_detector._squat_angle)
+                                        phase_detector._descent_drop,
+                                        phase_detector._bottom_drop)
                             rep_segmenter = RepSegmenter(
                                 min_rep_duration_s=self._scoring_config["calibration"]["min_rep_duration_s"],
                                 cooldown_s=self._scoring_config["calibration"]["rep_cooldown_s"],
