@@ -10,15 +10,16 @@ import type {
 } from "@/lib/squat-types";
 import { speakCoaching } from "@/lib/tts";
 
-// 3:4 portrait, matches container aspect ratio
+// 3:4 portrait, matches container aspect ratio — same resolution everywhere
 const CAPTURE_INTERVAL = 40; // ms, 25fps
 const CAPTURE_WIDTH = 480;
 const CAPTURE_HEIGHT = 640;
 const JPEG_QUALITY = 0.5;
 
-// Frame buffer — 8 frames initial fill to avoid underruns
-const BUFFER_FILL_SIZE = 4;
-const PLAYBACK_INTERVAL = 40; // ms, 25fps playback
+// Circular frame buffer — ~0.3s initial fill at 25fps
+const BUFFER_SIZE = 250; // max frames in buffer (10 seconds)
+const BUFFER_FILL_COUNT = 8; // frames to buffer before playback starts (~0.32s)
+const PLAYBACK_INTERVAL = 40; // ms, 25fps
 
 export function useSquatSession() {
   const [state, setState] = useState<SquatSessionState>({
@@ -35,162 +36,104 @@ export function useSquatSession() {
     coachingText: null,
   });
 
+  // Frame state — set by playback interval, drives <img> src
+  const [frameSrc, setFrameSrc] = useState<string>("");
+
   const videoRef = useRef<HTMLVideoElement>(null);
-  const renderedCanvasRef = useRef<HTMLCanvasElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const captureIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const playbackRafRef = useRef<number>(0);
-  const lastDisplayTime = useRef<number>(0);
+  const playbackIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const offscreenRef = useRef<HTMLCanvasElement | null>(null);
 
-  // Frame buffer: queue of blob URLs waiting to be displayed
-  const frameBuffer = useRef<Blob[]>([]);
+  // Circular buffer: fixed-size array of base64 strings
+  const frameBuffer = useRef<(string | null)[]>(new Array(BUFFER_SIZE).fill(null));
+  const writeIndex = useRef(0);
+  const readIndex = useRef(0);
   const bufferReady = useRef(false);
-
-  const handleJsonMessage = useCallback((text: string) => {
-    const msg: ServerMessage = JSON.parse(text);
-
-    switch (msg.type) {
-      case "calibration":
-        setState((s) => ({
-          ...s,
-          status: msg.status === "complete" ? "active" : "calibrating",
-          calibrationProgress: msg.progress,
-        }));
-        break;
-
-      case "frame": {
-        const d = msg.data;
-        setState((s) => {
-          const next = { ...s };
-          if (d.phase) next.phase = d.phase as SquatPhase;
-          if (d.knee_angle !== undefined) next.angles = { ...next.angles, knee: d.knee_angle };
-          if (d.hip_angle !== undefined) next.angles = { ...next.angles, hip: d.hip_angle };
-          if (d.torso_angle !== undefined) next.angles = { ...next.angles, torso: d.torso_angle };
-          if (d.score !== undefined) next.score = d.score;
-          if (d.confidence !== undefined) next.confidence = d.confidence;
-          return next;
-        });
-        break;
-      }
-
-      case "rep":
-        setState((s) => ({
-          ...s,
-          repCount: msg.rep_index,
-          reps: [...s.reps, msg as SquatRepResult],
-          currentFaults: msg.faults,
-          coachingText: msg.coaching_text,
-        }));
-        speakCoaching(msg.coaching_text);
-        break;
-
-      case "coaching":
-        setState((s) => ({ ...s, coachingText: msg.text }));
-        speakCoaching(msg.text);
-        break;
-
-      case "session_end":
-        setState((s) => ({ ...s, status: "ended" }));
-        break;
-    }
-  }, []);
+  const framesReceived = useRef(0);
 
   const handleMessage = useCallback((event: MessageEvent) => {
-    if (typeof event.data === "string") {
-      handleJsonMessage(event.data);
-    } else if (event.data instanceof Blob) {
-      // Push frame into buffer
-      frameBuffer.current.push(event.data);
+    if (typeof event.data !== "string") return;
 
-      // Drop oldest if buffer grows too large (caps at 16)
-      while (frameBuffer.current.length > BUFFER_FILL_SIZE * 2) {
-        frameBuffer.current.shift();
+    // Try to parse as JSON first
+    const firstChar = event.data[0];
+    if (firstChar === "{") {
+      // JSON message
+      const msg: ServerMessage = JSON.parse(event.data);
+
+      switch (msg.type) {
+        case "calibration":
+          setState((s) => ({
+            ...s,
+            status: msg.status === "complete" ? "active" : "calibrating",
+            calibrationProgress: msg.progress,
+          }));
+          break;
+
+        case "frame": {
+          const d = msg.data;
+          setState((s) => {
+            const next = { ...s };
+            if (d.phase) next.phase = d.phase as SquatPhase;
+            if (d.knee_angle !== undefined) next.angles = { ...next.angles, knee: d.knee_angle };
+            if (d.hip_angle !== undefined) next.angles = { ...next.angles, hip: d.hip_angle };
+            if (d.torso_angle !== undefined) next.angles = { ...next.angles, torso: d.torso_angle };
+            if (d.score !== undefined) next.score = d.score;
+            if (d.confidence !== undefined) next.confidence = d.confidence;
+            return next;
+          });
+          break;
+        }
+
+        case "rep":
+          setState((s) => ({
+            ...s,
+            repCount: msg.rep_index,
+            reps: [...s.reps, msg as SquatRepResult],
+            currentFaults: msg.faults,
+            coachingText: msg.coaching_text,
+          }));
+          speakCoaching(msg.coaching_text);
+          break;
+
+        case "coaching":
+          setState((s) => ({ ...s, coachingText: msg.text }));
+          speakCoaching(msg.text);
+          break;
+
+        case "session_end":
+          setState((s) => ({ ...s, status: "ended" }));
+          break;
       }
+    } else {
+      // Base64 frame data — write into circular buffer
+      frameBuffer.current[writeIndex.current] = event.data;
+      writeIndex.current = (writeIndex.current + 1) % BUFFER_SIZE;
+      framesReceived.current++;
 
-      // Start playback once initial buffer is filled
-      if (!bufferReady.current && frameBuffer.current.length >= BUFFER_FILL_SIZE) {
+      // Mark buffer ready after initial fill
+      if (!bufferReady.current && framesReceived.current >= BUFFER_FILL_COUNT) {
         bufferReady.current = true;
       }
     }
-  }, [handleJsonMessage]);
-
-  // Draw a frame onto the display canvas, center-cropped to fit.
-  // Canvas dimensions are set once (first frame) — never reset mid-stream
-  // because setting canvas.width/height clears the pixel buffer.
-  const canvasSized = useRef(false);
-
-  const drawFrameToCanvas = useCallback((img: HTMLImageElement) => {
-    const canvas = renderedCanvasRef.current;
-    if (!canvas) return;
-
-    // Size canvas to its CSS layout size, but only once
-    if (!canvasSized.current) {
-      const rect = canvas.getBoundingClientRect();
-      if (rect.width > 0 && rect.height > 0) {
-        canvas.width = rect.width;
-        canvas.height = rect.height;
-        canvasSized.current = true;
-      }
-    }
-
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const cw = canvas.width;
-    const ch = canvas.height;
-    const iw = img.naturalWidth;
-    const ih = img.naturalHeight;
-
-    if (cw === 0 || ch === 0 || iw === 0 || ih === 0) return;
-
-    // Center-crop: scale to cover, then draw the center portion
-    const scale = Math.max(cw / iw, ch / ih);
-    const sw = cw / scale;
-    const sh = ch / scale;
-    const sx = (iw - sw) / 2;
-    const sy = (ih - sh) / 2;
-
-    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, cw, ch);
   }, []);
 
-  // Playback via requestAnimationFrame — smooth, adaptive timing
+  // Playback: reads from circular buffer at steady 25fps
   const startPlayback = useCallback(() => {
-    if (playbackRafRef.current) return;
+    if (playbackIntervalRef.current) return;
 
-    const playFrame = (timestamp: number) => {
-      if (!bufferReady.current) {
-        playbackRafRef.current = requestAnimationFrame(playFrame);
-        return;
+    playbackIntervalRef.current = setInterval(() => {
+      if (!bufferReady.current) return;
+
+      const frame = frameBuffer.current[readIndex.current];
+      if (frame) {
+        setFrameSrc(`data:image/jpeg;base64,${frame}`);
+        // Clear slot after reading (optional, helps GC)
+        frameBuffer.current[readIndex.current] = null;
+        readIndex.current = (readIndex.current + 1) % BUFFER_SIZE;
       }
-
-      const elapsed = timestamp - lastDisplayTime.current;
-
-      if (elapsed >= PLAYBACK_INTERVAL && frameBuffer.current.length > 0) {
-        // Peek at next frame but don't remove yet
-        const blob = frameBuffer.current[0];
-        const url = URL.createObjectURL(blob);
-        const img = new Image();
-        img.onload = () => {
-          // Frame decoded successfully — now draw and remove from buffer
-          drawFrameToCanvas(img);
-          frameBuffer.current.shift();
-          URL.revokeObjectURL(url);
-        };
-        img.onerror = () => {
-          // Bad frame — drop it, keep current display
-          frameBuffer.current.shift();
-          URL.revokeObjectURL(url);
-        };
-        img.src = url;
-        lastDisplayTime.current = timestamp;
-      }
-
-      playbackRafRef.current = requestAnimationFrame(playFrame);
-    };
-
-    playbackRafRef.current = requestAnimationFrame(playFrame);
-  }, [drawFrameToCanvas]);
+    }, PLAYBACK_INTERVAL);
+  }, []);
 
   const startCapture = useCallback(() => {
     const video = videoRef.current;
@@ -219,7 +162,6 @@ export function useSquatSession() {
       );
     }, CAPTURE_INTERVAL);
 
-    // Start the playback loop too
     startPlayback();
   }, [startPlayback]);
 
@@ -236,8 +178,8 @@ export function useSquatSession() {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: "environment",
-          width: { ideal: 480 },
-          height: { ideal: 640 },
+          width: { ideal: CAPTURE_WIDTH },
+          height: { ideal: CAPTURE_HEIGHT },
           aspectRatio: { ideal: 3 / 4 },
         },
         audio: false,
@@ -262,7 +204,6 @@ export function useSquatSession() {
 
     const wsUrl = process.env.NEXT_PUBLIC_ANALYSIS_WS_URL || "ws://localhost:8000/ws/session";
     const ws = new WebSocket(wsUrl);
-    ws.binaryType = "blob";
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -274,7 +215,7 @@ export function useSquatSession() {
     ws.onclose = (e) => {
       console.log("WebSocket closed:", e.code, e.reason);
       if (captureIntervalRef.current) clearInterval(captureIntervalRef.current);
-      if (playbackRafRef.current) cancelAnimationFrame(playbackRafRef.current);
+      if (playbackIntervalRef.current) clearInterval(playbackIntervalRef.current);
     };
     ws.onerror = (e) => {
       console.error("WebSocket error:", e);
@@ -295,9 +236,9 @@ export function useSquatSession() {
       clearInterval(captureIntervalRef.current);
       captureIntervalRef.current = null;
     }
-    if (playbackRafRef.current) {
-      cancelAnimationFrame(playbackRafRef.current);
-      playbackRafRef.current = 0;
+    if (playbackIntervalRef.current) {
+      clearInterval(playbackIntervalRef.current);
+      playbackIntervalRef.current = null;
     }
     if (wsRef.current) {
       wsRef.current.close();
@@ -308,15 +249,20 @@ export function useSquatSession() {
       tracks.forEach((t) => t.stop());
       videoRef.current.srcObject = null;
     }
-    frameBuffer.current = [];
+    // Reset buffer
+    frameBuffer.current = new Array(BUFFER_SIZE).fill(null);
+    writeIndex.current = 0;
+    readIndex.current = 0;
     bufferReady.current = false;
+    framesReceived.current = 0;
+    setFrameSrc("");
     setState((s) => ({ ...s, status: "ended" }));
   }, []);
 
   useEffect(() => {
     return () => {
       if (captureIntervalRef.current) clearInterval(captureIntervalRef.current);
-      if (playbackRafRef.current) cancelAnimationFrame(playbackRafRef.current);
+      if (playbackIntervalRef.current) clearInterval(playbackIntervalRef.current);
       if (wsRef.current) wsRef.current.close();
       if (videoRef.current?.srcObject) {
         const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
@@ -327,8 +273,8 @@ export function useSquatSession() {
 
   return {
     state,
+    frameSrc,
     videoRef,
-    renderedCanvasRef,
     startSession,
     endSession,
   };

@@ -12,8 +12,7 @@ import type { Insight } from "@/lib/types";
 
 export default function SoloSessionPage() {
   const router = useRouter();
-  const { state, videoRef, renderedCanvasRef, startSession, endSession } = useSquatSession();
-  const containerRef = useRef<HTMLDivElement>(null);
+  const { state, frameSrc, videoRef, startSession, endSession } = useSquatSession();
   const [sessionTime, setSessionTime] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -106,8 +105,8 @@ export default function SoloSessionPage() {
       </div>
 
       {/* Video display */}
-      <div ref={containerRef} className="relative mx-4 aspect-[3/4] overflow-hidden rounded-xl bg-black">
-        {/* Camera feed — visible during calibration for positioning */}
+      <div className="relative mx-4 aspect-[3/4] overflow-hidden rounded-xl bg-black">
+        {/* Camera feed — visible during calibration, invisible when active */}
         <video
           ref={videoRef}
           autoPlay
@@ -118,13 +117,15 @@ export default function SoloSessionPage() {
           }`}
         />
 
-        {/* Server-rendered frames from buffer — fully covers video when active */}
-        <canvas
-          ref={renderedCanvasRef}
-          className={`absolute inset-0 z-10 h-full w-full bg-black ${
-            state.status === "active" ? "" : "hidden"
-          }`}
-        />
+        {/* Server-rendered frames — base64 JPEG via data URI, CSS scales to fit */}
+        {frameSrc && state.status === "active" && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={frameSrc}
+            alt=""
+            className="absolute inset-0 z-10 h-full w-full object-cover"
+          />
+        )}
 
         {/* Calibration overlay */}
         {state.status === "calibrating" && (

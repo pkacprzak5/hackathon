@@ -1,5 +1,6 @@
 # squat_coach/server/ws_handler.py
 """WebSocket endpoint for real-time squat analysis."""
+import base64
 import logging
 import time
 
@@ -16,9 +17,16 @@ logger = logging.getLogger("squat_coach.ws")
 async def session_handler(websocket: WebSocket) -> None:
     """Handle one client session over WebSocket.
 
-    Each connection gets its own pipeline. Processing is synchronous
-    (MediaPipe requires same-thread usage). The loop processes as fast
-    as it can — client sends at 24fps, server responds at processing speed.
+    Each connection gets its own pipeline.
+
+    Protocol — all messages are text (no binary from server):
+    - Client sends: binary JPEG frames at ~25fps
+    - Server sends: text messages only
+      - type "calibration": calibration progress
+      - type "frame_img": base64 JPEG of rendered frame (skeleton overlay)
+      - type "frame": JSON data (angles, score, phase, confidence)
+      - type "rep": rep completion event
+      - type "coaching": Gemini coaching text
     """
     await websocket.accept()
     logger.info("Client connected")
@@ -49,9 +57,10 @@ async def session_handler(websocket: WebSocket) -> None:
                                 frame_count, result.calibration.progress * 100)
                 continue
 
-            # Send rendered frame as binary
+            # Send rendered frame as base64 text
             if result.rendered_jpeg is not None:
-                await websocket.send_bytes(result.rendered_jpeg)
+                b64 = base64.b64encode(result.rendered_jpeg).decode("ascii")
+                await websocket.send_text(b64)
 
             # Send data as JSON
             compressed = delta.compress(result)
@@ -72,7 +81,7 @@ async def session_handler(websocket: WebSocket) -> None:
                     "text": result.coaching_text,
                 })
 
-            if frame_count % 24 == 0:
+            if frame_count % 25 == 0:
                 logger.info("Processed %d frames", frame_count)
 
     except WebSocketDisconnect:
