@@ -52,12 +52,22 @@ export function useSquatSession() {
   const framesReceived = useRef(0);
 
   const handleMessage = useCallback((event: MessageEvent) => {
-    if (typeof event.data !== "string") return;
+    if (typeof event.data !== "string") {
+      console.log("Non-string message received:", typeof event.data, event.data);
+      return;
+    }
 
-    const msg = JSON.parse(event.data);
+    let msg;
+    try {
+      msg = JSON.parse(event.data);
+    } catch (e) {
+      console.log("Failed to parse message, len:", event.data.length, "first 30:", event.data.substring(0, 30));
+      return;
+    }
 
     switch (msg.type) {
       case "calibration":
+        console.log("Calibration:", msg.status, msg.progress);
         setState((s) => ({
           ...s,
           status: msg.status === "complete" ? "active" : "calibrating",
@@ -67,6 +77,9 @@ export function useSquatSession() {
 
       case "new_frame": {
         // Store as data URI in circular buffer
+        if (framesReceived.current % 25 === 0) {
+          console.log("Received frame", framesReceived.current, "buffer write:", writeIndex.current, "read:", readIndex.current, "ready:", isReady.current);
+        }
         frameBuffer.current[writeIndex.current] = `data:image/jpeg;base64,${msg.data}`;
         writeIndex.current = (writeIndex.current + 1) % BUFFER_SIZE;
         framesReceived.current++;
