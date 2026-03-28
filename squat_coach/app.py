@@ -262,21 +262,19 @@ class SquatCoachApp:
                                 prev_phase.value, phase.value,
                                 features.get("primary_knee_angle", 0))
 
-                # Track per-rep extremes throughout the whole rep
+                # Track per-rep extremes
                 if phase in (Phase.DESCENT, Phase.BOTTOM, Phase.ASCENT):
                     rep_min_knee = min(rep_min_knee, features.get("primary_knee_angle", 180))
                     rep_max_torso = max(rep_max_torso, features.get("torso_inclination_deg", 0))
                     rep_max_head_offset = max(rep_max_head_offset, features.get("head_to_trunk_offset", 0))
                     rep_features_snapshot = dict(features)
 
-                    # Live score — smoothed with EMA so it doesn't jump around
-                    live_depth = compute_depth_score(rep_min_knee, ideal_ref.target_knee_angle if ideal_ref else 90)
-                    raw_live = live_depth
-                    # Smooth: score can only drop slowly (alpha=0.15), rises faster (alpha=0.4)
-                    if raw_live < live_score_ema:
-                        live_score_ema = 0.85 * live_score_ema + 0.15 * raw_live  # slow drop
-                    else:
-                        live_score_ema = 0.6 * live_score_ema + 0.4 * raw_live   # faster rise
+                # Live score: depth score based on best depth reached (only goes up or stays)
+                if phase != Phase.TOP:
+                    best_depth_score = compute_depth_score(rep_min_knee, ideal_ref.target_knee_angle if ideal_ref else 90)
+                    # Score can only improve during a rep (deeper = better), never drops
+                    if best_depth_score > live_score_ema:
+                        live_score_ema = best_depth_score
                     session.current_score = live_score_ema
 
                 # Fault detection

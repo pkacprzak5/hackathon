@@ -73,7 +73,8 @@ _SYSTEM_INSTRUCTION = (
     "- If score is great: go absolutely wild with praise\n"
     "- If score is bad: be funny about it but still kind and motivating\n"
     "- Never use markdown or formatting — this is spoken aloud\n"
-    "- Keep it short enough to say in about 5-8 seconds\n\n"
+    "- Your response should be 2-3 full sentences, about 30-50 words total\n"
+    "- IMPORTANT: Never reply with just a few words. Always give a complete thought.\n\n"
     "Example replies:\n"
     "- 'Wow, that squat was deeper than my student loans! Score 92, you absolute legend. "
     "Keep that chest proud like you just won the lottery.'\n"
@@ -186,8 +187,8 @@ def send_to_gemini_async(
                 contents=prompt,
                 config={
                     "system_instruction": _SYSTEM_INSTRUCTION,
-                    "max_output_tokens": 200,
-                    "temperature": 0.7,
+                    "max_output_tokens": 500,
+                    "temperature": 0.9,
                 },
             )
 
