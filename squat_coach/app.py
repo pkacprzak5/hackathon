@@ -1,6 +1,7 @@
 # squat_coach/app.py
 """Main application orchestrator — ties all subsystems together."""
 import logging
+import os
 import time
 import cv2
 import yaml
@@ -32,7 +33,7 @@ from squat_coach.scoring.rationale import build_rationale
 from squat_coach.scoring.trend_analysis import TrendTracker
 from squat_coach.events.event_builder import build_rep_summary
 from squat_coach.events.formatter import format_frame_log, format_rep_summary
-from squat_coach.events.gemini_payloads import format_gemini_payload, send_to_gemini_async, get_last_feedback
+from squat_coach.events.gemini_payloads import format_gemini_payload, send_to_gemini_async, get_last_feedback, _get_client, speak
 from squat_coach.events.coaching_priority import CoachingPrioritizer
 from squat_coach.rendering.overlay import render_overlay
 from squat_coach.session.session_state import SessionState
@@ -78,6 +79,15 @@ class SquatCoachApp:
             from squat_coach.training.train_all import train_all
             train_all()
             return
+
+        # Pre-initialize Gemini client so first rep feedback is fast
+        gemini_cfg = self._config.get("gemini", {})
+        if gemini_cfg.get("enabled", False):
+            gemini_key = gemini_cfg.get("api_key", "") or os.environ.get("GEMINI_API_KEY", "")
+            if gemini_key:
+                _get_client(gemini_key)
+                speak("Hey! Squat Coach is ready. Stand still for calibration, then let's go!")
+                logger.info("Gemini client pre-initialized")
 
         # Initialize subsystems
         camera = self._create_camera()
@@ -251,20 +261,17 @@ class SquatCoachApp:
                                 prev_phase.value, phase.value,
                                 features.get("primary_knee_angle", 0))
 
-                # Track per-rep extremes and update live score estimate
-                if phase in (Phase.DESCENT, Phase.BOTTOM, Phase.ASCENT):
+                # Track per-rep extremes (only during descent and bottom, not ascent)
+                if phase in (Phase.DESCENT, Phase.BOTTOM):
                     rep_min_knee = min(rep_min_knee, features.get("primary_knee_angle", 180))
                     rep_max_torso = max(rep_max_torso, features.get("torso_inclination_deg", 0))
                     rep_max_head_offset = max(rep_max_head_offset, features.get("head_to_trunk_offset", 0))
                     rep_features_snapshot = dict(features)
 
-                    # Live score estimate during rep (updates continuously)
+                # Live score: only update depth part, keep score stable during ascent
+                if phase in (Phase.DESCENT, Phase.BOTTOM):
                     live_depth = compute_depth_score(rep_min_knee, ideal_ref.target_knee_angle if ideal_ref else 90)
-                    live_trunk = compute_trunk_control_score(
-                        features.get("trunk_stability", 0), rep_max_torso,
-                        ideal_ref.trunk_neutral_angle if ideal_ref else 10,
-                    )
-                    session.current_score = (live_depth + live_trunk) / 2.0
+                    session.current_score = live_depth  # Show depth score as main live indicator
 
                 # Fault detection
                 fault_config = self._scoring_config.get("faults", {}).get("thresholds", {})
