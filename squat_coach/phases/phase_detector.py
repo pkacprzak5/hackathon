@@ -1,8 +1,12 @@
-"""Phase detection from fused model outputs with fallback to kinematics.
+"""Phase detection from fused model outputs with fallback to knee angle kinematics.
 
 Uses model phase_probs as primary signal when confidence is sufficient.
-Falls back to hip vertical position + knee angle tracking when model
-confidence is low (common with synthetic-only training data).
+Falls back to knee angle tracking when model confidence is low — knee angle
+is the most reliable indicator of squat phase:
+  - Standing (TOP): knee ~160-180°
+  - Going down (DESCENT): knee decreasing
+  - Deep squat (BOTTOM): knee at minimum (~70-100°)
+  - Coming up (ASCENT): knee increasing back toward standing
 """
 import numpy as np
 from numpy.typing import NDArray
@@ -11,12 +15,7 @@ from squat_coach.phases.state_machine import is_valid_transition
 
 
 class PhaseDetector:
-    """Determine current squat phase from model probabilities + kinematics.
-
-    Two-signal approach:
-    1. Model phase_probs (primary when confidence > threshold)
-    2. Hip Y position + knee angle (fallback, always active as secondary)
-    """
+    """Determine current squat phase from model probabilities + knee angle."""
 
     def __init__(
         self,
@@ -29,11 +28,18 @@ class PhaseDetector:
         self._current_phase = Phase.TOP
         self._frames_in_phase = self._min_frames
 
-        # Hip tracking for kinematic fallback
-        self._hip_y_history: list[float] = []
-        self._hip_y_baseline: float | None = None
-        self._hip_y_min: float = float('inf')  # Track lowest point in current rep
-        self._smoothing_window = 5
+        # Knee angle tracking for kinematic fallback
+        self._knee_history: list[float] = []
+        self._knee_baseline: float | None = None  # Standing knee angle
+        self._smoothing = 5  # frames to smooth over
+
+        # Configurable thresholds (in degrees)
+        self._descent_threshold = 15.0   # knee must drop this much from baseline to be "descending"
+        self._bottom_threshold = 30.0    # knee must drop this much from baseline to be "bottom"
+        self._ascent_recovery = 15.0     # knee must recover this much from min to be "ascending"
+        self._top_recovery = 10.0        # within this much of baseline = back at top
+
+        self._rep_knee_min: float = 180.0  # track deepest point in current rep
 
     _PHASE_ORDER = [Phase.TOP, Phase.DESCENT, Phase.BOTTOM, Phase.ASCENT]
 
@@ -47,18 +53,18 @@ class PhaseDetector:
 
         Args:
             phase_probs: (4,) logits or probabilities [top, descent, bottom, ascent].
-            hip_y: Current mid-hip Y position (world coords, Y-down = deeper).
-            knee_angle: Optional primary knee angle for additional signal.
-
-        Returns:
-            Current phase after applying state machine + debounce.
+            hip_y: Current mid-hip Y in image coords (0-1, increases downward).
+            knee_angle: Primary knee angle in degrees (~180=straight, ~90=deep squat).
         """
         self._frames_in_phase += 1
-        self._hip_y_history.append(hip_y)
 
-        # Set baseline from first 15 frames of standing
-        if self._hip_y_baseline is None and len(self._hip_y_history) >= 15:
-            self._hip_y_baseline = np.mean(self._hip_y_history[:15])
+        # Track knee angle
+        if knee_angle is not None:
+            self._knee_history.append(knee_angle)
+
+        # Set baseline from first 20 frames of standing
+        if self._knee_baseline is None and len(self._knee_history) >= 20:
+            self._knee_baseline = np.mean(self._knee_history[:20])
 
         # Try model-based detection
         probs = np.array(phase_probs, dtype=np.float64)
@@ -70,8 +76,8 @@ class PhaseDetector:
         proposed_idx = int(np.argmax(probs))
         proposed_model = self._PHASE_ORDER[proposed_idx]
 
-        # Kinematic fallback
-        proposed_kinematic = self._detect_from_kinematics(hip_y)
+        # Kinematic fallback from knee angle
+        proposed_kinematic = self._detect_from_knee_angle()
 
         # Choose: model if confident, kinematic otherwise
         if max_prob >= self._conf_threshold:
@@ -88,60 +94,55 @@ class PhaseDetector:
                 self._current_phase = proposed
                 self._frames_in_phase = 0
 
-                # Track hip min for bottom detection
+                # Reset rep tracking on new descent
                 if proposed == Phase.DESCENT:
-                    self._hip_y_min = hip_y
+                    self._rep_knee_min = 180.0
                 elif proposed == Phase.TOP:
-                    self._hip_y_min = float('inf')
+                    self._rep_knee_min = 180.0
 
-        # Update hip min during descent/bottom
-        if self._current_phase in (Phase.DESCENT, Phase.BOTTOM):
-            self._hip_y_min = min(self._hip_y_min, hip_y)
+        # Track minimum knee angle during rep
+        if knee_angle is not None and self._current_phase in (Phase.DESCENT, Phase.BOTTOM):
+            self._rep_knee_min = min(self._rep_knee_min, knee_angle)
 
         return self._current_phase
 
-    def _detect_from_kinematics(self, hip_y: float) -> Phase:
-        """Fallback phase detection from hip vertical movement.
+    def _detect_from_knee_angle(self) -> Phase:
+        """Fallback: detect phase from knee angle trajectory.
 
-        In BlazePose world coords, Y increases downward (positive = deeper squat).
-        We track the smoothed hip Y velocity and position relative to baseline.
+        Standing knee ~160-175°. Squat bottom knee ~70-110°.
         """
-        if self._hip_y_baseline is None:
-            return self._current_phase
-        if len(self._hip_y_history) < self._smoothing_window + 2:
+        if self._knee_baseline is None or len(self._knee_history) < self._smoothing + 1:
             return self._current_phase
 
-        # Smoothed current and previous hip Y
-        current_avg = np.mean(self._hip_y_history[-self._smoothing_window:])
-        prev_avg = np.mean(self._hip_y_history[-(self._smoothing_window * 2):-self._smoothing_window])
-        velocity = current_avg - prev_avg  # positive = going down, negative = going up
+        # Smoothed current knee angle
+        current_knee = np.mean(self._knee_history[-self._smoothing:])
+        # Knee angle drop from baseline (positive = more bent)
+        drop = self._knee_baseline - current_knee
 
-        # How deep relative to baseline
-        depth = current_avg - self._hip_y_baseline
-
-        # Adaptive thresholds based on body movement range
-        # In world coords, a squat moves hip ~0.1-0.4m
-        vel_threshold = 0.003   # m per window
-        depth_down = 0.03       # 3cm below baseline = "going down"
-        depth_up = 0.02         # within 2cm of baseline = "back up"
+        # Velocity: positive = bending more, negative = straightening
+        prev_knee = np.mean(self._knee_history[-(self._smoothing * 2):-self._smoothing]) \
+            if len(self._knee_history) >= self._smoothing * 2 else current_knee
+        velocity = prev_knee - current_knee  # positive = bending, negative = straightening
 
         if self._current_phase == Phase.TOP:
-            if velocity > vel_threshold and depth > depth_down:
+            # Start descent when knee drops significantly and is still going down
+            if drop > self._descent_threshold and velocity > 0.5:
                 return Phase.DESCENT
 
         elif self._current_phase == Phase.DESCENT:
-            # Bottom = velocity reverses or slows significantly while deep
-            if depth > depth_down and velocity < vel_threshold * 0.3:
+            # Bottom when knee stops going down (velocity near zero or reversing) while deep
+            if drop > self._bottom_threshold and velocity < 0.5:
                 return Phase.BOTTOM
 
         elif self._current_phase == Phase.BOTTOM:
-            # Ascent = hip clearly moving upward
-            if velocity < -vel_threshold:
+            # Ascent when knee clearly straightening
+            recovery = current_knee - self._rep_knee_min
+            if recovery > self._ascent_recovery and velocity < -0.5:
                 return Phase.ASCENT
 
         elif self._current_phase == Phase.ASCENT:
-            # Top = hip returns near baseline
-            if abs(depth) < depth_up or velocity > -vel_threshold * 0.3:
+            # Top when knee back near baseline
+            if drop < self._top_recovery:
                 return Phase.TOP
 
         return self._current_phase
@@ -153,6 +154,6 @@ class PhaseDetector:
     def reset(self) -> None:
         self._current_phase = Phase.TOP
         self._frames_in_phase = 0
-        self._hip_y_history.clear()
-        self._hip_y_baseline = None
-        self._hip_y_min = float('inf')
+        self._knee_history.clear()
+        self._knee_baseline = None
+        self._rep_knee_min = 180.0

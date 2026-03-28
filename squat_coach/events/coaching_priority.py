@@ -19,16 +19,19 @@ class CoachingPrioritizer:
         """Select the highest-priority coaching cue.
 
         Returns:
-            Coaching cue string, or empty string if no faults.
+            Coaching cue string. Returns positive message if no significant faults.
         """
-        if not faults:
-            return ""
+        # Filter out low-severity faults (< 0.3) — don't nag about minor stuff
+        significant_faults = [f for f in faults if f.severity >= 0.3]
+
+        if not significant_faults:
+            return "Good form!"
 
         now = time.monotonic()
         best_priority = -1.0
         best_cue = ""
 
-        for fault in faults:
+        for fault in significant_faults:
             last = self._last_shown.get(fault.fault_type, 0.0)
             recency = max(now - last, 1.0)
 

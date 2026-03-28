@@ -218,15 +218,17 @@ class SquatCoachApp:
                 if seq_buf.is_ready and inference_mgr and inference_mgr.has_models:
                     fused = inference_mgr.infer(seq_buf.get_sequence())
 
-                # Phase detection — use raw (non-hip-centered) landmarks for hip Y tracking
-                hip_y = float((smoothed[23][1] + smoothed[24][1]) / 2.0)
+                # Phase detection — use IMAGE landmarks for hip Y (moves in frame)
+                # and knee angle as primary kinematic signal
+                img_lm = pose_result.image_landmarks
+                hip_y_img = float((img_lm[23][1] + img_lm[24][1]) / 2.0)
+                knee_angle = features.get("primary_knee_angle", 170.0)
+
                 if fused is not None:
-                    phase = phase_detector.detect(fused.phase_probs, hip_y)
+                    phase = phase_detector.detect(fused.phase_probs, hip_y_img, knee_angle)
                 else:
-                    # Still run kinematic fallback even without model output
-                    import numpy as _np
-                    dummy_probs = _np.array([0.25, 0.25, 0.25, 0.25])
-                    phase = phase_detector.detect(dummy_probs, hip_y)
+                    dummy_probs = np.array([0.25, 0.25, 0.25, 0.25])
+                    phase = phase_detector.detect(dummy_probs, hip_y_img, knee_angle)
 
                 prev_phase = session.current_phase
                 session.current_phase = phase

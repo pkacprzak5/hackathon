@@ -23,16 +23,23 @@ def build_rationale(
     trend_str: str,
 ) -> RepRationale:
     """Build a rationale object for a completed rep."""
-    # Dominant fault = highest severity
-    if faults:
-        dominant = max(faults, key=lambda f: f.severity)
+    # Dominant fault = highest severity (only significant ones)
+    significant = [f for f in faults if f.severity >= 0.3]
+    if significant:
+        dominant = max(significant, key=lambda f: f.severity)
         dominant_name = dominant.fault_type.value
         evidence_str = "; ".join(dominant.evidence)
         cue = dominant.explanation_token
     else:
         dominant_name = "none"
         evidence_str = "No significant faults detected"
-        cue = "Good form, keep it up!"
+        rep_q = scores.get("rep_quality", 50)
+        if rep_q >= 80:
+            cue = "Great rep!"
+        elif rep_q >= 60:
+            cue = "Good form, keep it up!"
+        else:
+            cue = "Keep working on it!"
 
     return RepRationale(
         rep_index=rep_index,
