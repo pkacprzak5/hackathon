@@ -12,7 +12,7 @@ import type { Insight } from "@/lib/types";
 
 export default function SoloSessionPage() {
   const router = useRouter();
-  const { state, frameSrc, videoRef, startSession, endSession } = useSquatSession();
+  const { state, frame, videoRef, startSession, endSession } = useSquatSession();
   const [sessionTime, setSessionTime] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -116,13 +116,14 @@ export default function SoloSessionPage() {
           className="absolute inset-0 h-full w-full object-cover"
         />
 
-        {/* Server-rendered frames — base64 JPEG via data URI, covers video via z-10 */}
-        {frameSrc && (
+        {/* Server-rendered frames — data URI from circular buffer */}
+        {frame && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={frameSrc}
+            src={frame}
             alt=""
-            className="absolute inset-0 z-10 h-full w-full object-cover"
+            style={{ maxWidth: "100%", height: "100%" }}
+            className="absolute inset-0 z-10 object-cover"
           />
         )}
 

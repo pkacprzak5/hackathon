@@ -1,6 +1,7 @@
 # squat_coach/server/ws_handler.py
 """WebSocket endpoint for real-time squat analysis."""
 import base64
+import json
 import logging
 import time
 
@@ -17,16 +18,14 @@ logger = logging.getLogger("squat_coach.ws")
 async def session_handler(websocket: WebSocket) -> None:
     """Handle one client session over WebSocket.
 
-    Each connection gets its own pipeline.
+    All server→client messages are JSON text. No binary.
 
-    Protocol — all messages are text (no binary from server):
-    - Client sends: binary JPEG frames at ~25fps
-    - Server sends: text messages only
-      - type "calibration": calibration progress
-      - type "frame_img": base64 JPEG of rendered frame (skeleton overlay)
-      - type "frame": JSON data (angles, score, phase, confidence)
-      - type "rep": rep completion event
-      - type "coaching": Gemini coaching text
+    Message types:
+    - {"type":"calibration", ...}
+    - {"type":"new_frame", "data": "<base64 JPEG>"}
+    - {"type":"frame", "data": {...angles, score, phase...}}
+    - {"type":"rep", ...}
+    - {"type":"coaching", ...}
     """
     await websocket.accept()
     logger.info("Client connected")
@@ -57,10 +56,13 @@ async def session_handler(websocket: WebSocket) -> None:
                                 frame_count, result.calibration.progress * 100)
                 continue
 
-            # Send rendered frame as base64 text
+            # Send rendered frame as base64 inside JSON
             if result.rendered_jpeg is not None:
-                b64 = base64.b64encode(result.rendered_jpeg).decode("ascii")
-                await websocket.send_text(b64)
+                b64 = base64.b64encode(result.rendered_jpeg).decode("utf-8")
+                await websocket.send_text(json.dumps({
+                    "type": "new_frame",
+                    "data": b64,
+                }))
 
             # Send data as JSON
             compressed = delta.compress(result)
