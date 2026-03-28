@@ -31,13 +31,14 @@ export function useSquatSession() {
   });
 
   const videoRef = useRef<HTMLVideoElement>(null);
+  const renderedImgRef = useRef<HTMLImageElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const captureIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const offscreenRef = useRef<HTMLCanvasElement | null>(null);
+  const prevBlobUrl = useRef<string | null>(null);
 
-  const handleMessage = useCallback((event: MessageEvent) => {
-    // All messages are JSON text now (no binary)
-    const msg: ServerMessage = JSON.parse(event.data);
+  const handleJsonMessage = useCallback((text: string) => {
+    const msg: ServerMessage = JSON.parse(text);
 
     switch (msg.type) {
       case "calibration":
@@ -85,6 +86,27 @@ export function useSquatSession() {
     }
   }, []);
 
+  const handleMessage = useCallback((event: MessageEvent) => {
+    if (typeof event.data === "string") {
+      // JSON text message (data)
+      handleJsonMessage(event.data);
+    } else if (event.data instanceof Blob) {
+      // Binary message (rendered frame from server)
+      const img = renderedImgRef.current;
+      if (!img) return;
+
+      const url = URL.createObjectURL(event.data);
+      img.onload = () => {
+        // Revoke previous URL after the new image has loaded
+        if (prevBlobUrl.current) {
+          URL.revokeObjectURL(prevBlobUrl.current);
+        }
+        prevBlobUrl.current = url;
+      };
+      img.src = url;
+    }
+  }, [handleJsonMessage]);
+
   const startCapture = useCallback(() => {
     const video = videoRef.current;
     const ws = wsRef.current;
@@ -101,6 +123,7 @@ export function useSquatSession() {
 
     captureIntervalRef.current = setInterval(() => {
       if (ws.readyState !== WebSocket.OPEN) return;
+      if (video.readyState < 2) return; // video not ready yet
       ctx.drawImage(video, 0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT);
       offscreen.toBlob(
         (blob) => {
@@ -118,8 +141,8 @@ export function useSquatSession() {
     try {
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error(
-          "Camera API not available. This usually means the page is served over HTTP instead of HTTPS. " +
-          "On mobile, camera requires a secure context (HTTPS or localhost)."
+          "Camera API not available. On mobile, this requires HTTPS. " +
+          "Make sure you're using https:// not http://",
         );
       }
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -128,6 +151,12 @@ export function useSquatSession() {
       });
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        // Wait for video to actually start playing
+        await new Promise<void>((resolve) => {
+          const v = videoRef.current!;
+          if (v.readyState >= 2) { resolve(); return; }
+          v.onloadeddata = () => resolve();
+        });
       }
     } catch (err) {
       console.error("Camera access failed:", err);
@@ -139,26 +168,32 @@ export function useSquatSession() {
       return;
     }
 
+    // Connect WebSocket
     const wsUrl = process.env.NEXT_PUBLIC_ANALYSIS_WS_URL || "ws://localhost:8000/ws/session";
     const ws = new WebSocket(wsUrl);
+    ws.binaryType = "blob";
     wsRef.current = ws;
 
     ws.onopen = () => {
+      console.log("WebSocket connected to", wsUrl);
       setState((s) => ({ ...s, status: "calibrating", calibrationProgress: 0 }));
       startCapture();
     };
     ws.onmessage = handleMessage;
-    ws.onclose = () => {
+    ws.onclose = (e) => {
+      console.log("WebSocket closed:", e.code, e.reason);
       if (captureIntervalRef.current) clearInterval(captureIntervalRef.current);
     };
-    ws.onerror = () => {
+    ws.onerror = (e) => {
+      console.error("WebSocket error:", e);
       ws.close();
       setState((s) => ({
         ...s,
         status: "idle",
-        coachingText: `Cannot connect to analysis server at ${wsUrl}. ` +
-          "If using HTTPS, make sure you've accepted the certificate for the backend URL first " +
-          "(open it in a browser tab and accept the warning).",
+        coachingText: `Cannot connect to server at ${wsUrl}. ` +
+          "Accept the backend certificate first: open " +
+          wsUrl.replace("wss://", "https://").replace("ws://", "http://").replace("/ws/session", "/health") +
+          " in a browser tab.",
       }));
     };
   }, [handleMessage, startCapture]);
@@ -177,6 +212,10 @@ export function useSquatSession() {
       tracks.forEach((t) => t.stop());
       videoRef.current.srcObject = null;
     }
+    if (prevBlobUrl.current) {
+      URL.revokeObjectURL(prevBlobUrl.current);
+      prevBlobUrl.current = null;
+    }
     setState((s) => ({ ...s, status: "ended" }));
   }, []);
 
@@ -188,20 +227,14 @@ export function useSquatSession() {
         const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
         tracks.forEach((t) => t.stop());
       }
+      if (prevBlobUrl.current) URL.revokeObjectURL(prevBlobUrl.current);
     };
   }, []);
-
-  // Build the MJPEG stream URL from the WS URL
-  const baseUrl = (process.env.NEXT_PUBLIC_ANALYSIS_WS_URL || "ws://localhost:8000/ws/session")
-    .replace("wss://", "https://")
-    .replace("ws://", "http://")
-    .replace("/ws/session", "");
-  const streamUrl = `${baseUrl}/stream`;
 
   return {
     state,
     videoRef,
-    streamUrl,
+    renderedImgRef,
     startSession,
     endSession,
   };

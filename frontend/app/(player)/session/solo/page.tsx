@@ -12,7 +12,7 @@ import type { Insight } from "@/lib/types";
 
 export default function SoloSessionPage() {
   const router = useRouter();
-  const { state, videoRef, streamUrl, startSession, endSession } = useSquatSession();
+  const { state, videoRef, renderedImgRef, startSession, endSession } = useSquatSession();
   const [sessionTime, setSessionTime] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -115,13 +115,13 @@ export default function SoloSessionPage() {
           className={state.status === "active" ? "hidden" : "h-full w-full object-cover"}
         />
 
-        {/* MJPEG stream from server — skeleton rendered on frames, continuous video */}
+        {/* Server-rendered frames (skeleton on video) — updated via WebSocket binary */}
         {state.status === "active" && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={streamUrl}
-            alt="Squat analysis"
-            className="h-full w-full object-cover"
+            ref={renderedImgRef}
+            alt=""
+            className="h-full w-full object-contain bg-black"
           />
         )}
 
