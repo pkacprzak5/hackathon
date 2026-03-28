@@ -10,15 +10,15 @@ import type {
 } from "@/lib/squat-types";
 import { speakCoaching } from "@/lib/tts";
 
-// Portrait orientation, low res for speed
-const CAPTURE_INTERVAL = 42; // ms, ~24fps
-const CAPTURE_WIDTH = 360;
+// 3:4 portrait, matches container aspect ratio
+const CAPTURE_INTERVAL = 40; // ms, 25fps
+const CAPTURE_WIDTH = 480;
 const CAPTURE_HEIGHT = 640;
 const JPEG_QUALITY = 0.5;
 
-// Frame buffer — initial fill of 5 frames for jitter protection, then play ASAP
-const BUFFER_FILL_SIZE = 5;
-const PLAYBACK_INTERVAL = 42; // ms, ~24fps playback
+// Frame buffer — 8 frames initial fill to avoid underruns
+const BUFFER_FILL_SIZE = 8;
+const PLAYBACK_INTERVAL = 40; // ms, 25fps playback
 
 export function useSquatSession() {
   const [state, setState] = useState<SquatSessionState>({
@@ -102,7 +102,7 @@ export function useSquatSession() {
       // Push frame into buffer
       frameBuffer.current.push(event.data);
 
-      // Drop oldest if buffer grows too large (network stall recovery)
+      // Drop oldest if buffer grows too large (caps at 16)
       while (frameBuffer.current.length > BUFFER_FILL_SIZE * 2) {
         frameBuffer.current.shift();
       }
@@ -203,9 +203,9 @@ export function useSquatSession() {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: "environment",
-          width: { ideal: 640 },
-          height: { ideal: 1136 },
-          aspectRatio: { ideal: 9 / 16 },
+          width: { ideal: 480 },
+          height: { ideal: 640 },
+          aspectRatio: { ideal: 3 / 4 },
         },
         audio: false,
       });
