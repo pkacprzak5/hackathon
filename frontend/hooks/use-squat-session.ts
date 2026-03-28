@@ -53,13 +53,15 @@ export function useSquatSession() {
   const framesReceived = useRef(0);
 
   const handleMessage = useCallback((event: MessageEvent) => {
-    if (typeof event.data !== "string") return;
+    const data = event.data;
+    console.log("WS msg type:", typeof data, "len:", typeof data === "string" ? data.length : "N/A", "first:", typeof data === "string" ? data.substring(0, 10) : data);
+
+    if (typeof data !== "string") return;
 
     // Try to parse as JSON first
-    const firstChar = event.data[0];
-    if (firstChar === "{") {
+    if (data[0] === "{") {
       // JSON message
-      const msg: ServerMessage = JSON.parse(event.data);
+      const msg: ServerMessage = JSON.parse(data);
 
       switch (msg.type) {
         case "calibration":
@@ -107,7 +109,7 @@ export function useSquatSession() {
       }
     } else {
       // Base64 frame data — write into circular buffer
-      frameBuffer.current[writeIndex.current] = event.data;
+      frameBuffer.current[writeIndex.current] = data;
       writeIndex.current = (writeIndex.current + 1) % BUFFER_SIZE;
       framesReceived.current++;
 
