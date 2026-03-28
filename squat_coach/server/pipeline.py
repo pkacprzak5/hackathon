@@ -118,7 +118,9 @@ class SquatCoachPipeline:
                     seq=seq, timestamp=timestamp,
                     calibration=CalibrationMessage(status="in_progress", progress=progress),
                 )
-            return FrameResult(seq=seq, timestamp=timestamp)
+            # No pose detected but calibrated — still send the raw frame
+            _, jpeg_buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
+            return FrameResult(seq=seq, timestamp=timestamp, rendered_jpeg=jpeg_buf.tobytes())
 
         self._session.dropped_frame_count = 0
 
