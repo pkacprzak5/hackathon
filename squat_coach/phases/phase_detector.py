@@ -1,47 +1,69 @@
-"""Phase detection from fused model outputs with fallback to knee angle kinematics.
+"""Phase detection using knee angle direction tracking.
 
-Uses model phase_probs as primary signal when confidence is sufficient.
-Falls back to knee angle tracking when model confidence is low — knee angle
-is the most reliable indicator of squat phase:
-  - Standing (TOP): knee ~160-180°
-  - Going down (DESCENT): knee decreasing
-  - Deep squat (BOTTOM): knee at minimum (~70-100°)
-  - Coming up (ASCENT): knee increasing back toward standing
+Simple, robust approach that doesn't depend on a fixed baseline:
+- Track smoothed knee angle and its direction (bending vs straightening)
+- Detect local peaks (standing) and valleys (bottom of squat)
+- Use hysteresis to prevent jitter
+
+Knee angle: ~160-175° standing, ~70-110° deep squat.
 """
+import logging
 import numpy as np
 from numpy.typing import NDArray
+from collections import deque
 from squat_coach.utils.enums import Phase
-from squat_coach.phases.state_machine import is_valid_transition
+
+logger = logging.getLogger("squat_coach.phase")
 
 
 class PhaseDetector:
-    """Determine current squat phase from model probabilities + knee angle."""
+    """Detect squat phase from knee angle direction changes.
+
+    Adapts to the user's actual knee angle range by learning from
+    calibration data. Uses direction of knee angle change (bending
+    vs straightening) with hysteresis to prevent jitter.
+    """
 
     def __init__(
         self,
-        min_phase_duration_s: float = 0.15,
+        min_phase_duration_s: float = 0.1,
         fps: float = 30.0,
         confidence_threshold: float = 0.4,
+        direction_window: int = 6,
+        hysteresis_deg: float = 3.0,
+        calibrated_knee_angle: float | None = None,
     ) -> None:
         self._min_frames = max(1, int(min_phase_duration_s * fps))
         self._conf_threshold = confidence_threshold
+        self._direction_window = direction_window
+        self._hysteresis = hysteresis_deg
+
         self._current_phase = Phase.TOP
         self._frames_in_phase = self._min_frames
 
-        # Knee angle tracking for kinematic fallback
-        self._knee_history: list[float] = []
-        self._knee_baseline: float | None = None  # Standing knee angle
-        self._smoothing = 5  # frames to smooth over
+        # Adaptive thresholds — set from calibrated standing angle
+        if calibrated_knee_angle and calibrated_knee_angle > 100:
+            self._standing_angle = calibrated_knee_angle - 15.0
+            self._squat_angle = calibrated_knee_angle - 30.0
+        else:
+            self._standing_angle = 145.0
+            self._squat_angle = 125.0
 
-        # Configurable thresholds (in degrees)
-        self._descent_threshold = 15.0   # knee must drop this much from baseline to be "descending"
-        self._bottom_threshold = 30.0    # knee must drop this much from baseline to be "bottom"
-        self._ascent_recovery = 15.0     # knee must recover this much from min to be "ascending"
-        self._top_recovery = 10.0        # within this much of baseline = back at top
-
-        self._rep_knee_min: float = 180.0  # track deepest point in current rep
+        # Knee angle tracking
+        self._knee_buf: deque[float] = deque(maxlen=90)
+        self._direction: str = "stable"
+        self._local_max: float = 0.0
+        self._local_min: float = 180.0
 
     _PHASE_ORDER = [Phase.TOP, Phase.DESCENT, Phase.BOTTOM, Phase.ASCENT]
+
+    # Valid transitions
+    _VALID = {
+        Phase.TOP: {Phase.DESCENT},
+        Phase.DESCENT: {Phase.BOTTOM},
+        Phase.BOTTOM: {Phase.ASCENT},
+        Phase.ASCENT: {Phase.TOP},
+    }
 
     def detect(
         self,
@@ -49,100 +71,90 @@ class PhaseDetector:
         hip_y: float,
         knee_angle: float | None = None,
     ) -> Phase:
-        """Detect current phase.
+        """Detect current phase from knee angle.
 
         Args:
-            phase_probs: (4,) logits or probabilities [top, descent, bottom, ascent].
-            hip_y: Current mid-hip Y in image coords (0-1, increases downward).
-            knee_angle: Primary knee angle in degrees (~180=straight, ~90=deep squat).
+            phase_probs: Model output (used when confidence is high).
+            hip_y: Not used in this version (kept for API compat).
+            knee_angle: Primary knee angle in degrees.
         """
         self._frames_in_phase += 1
 
-        # Track knee angle
-        if knee_angle is not None:
-            self._knee_history.append(knee_angle)
+        if knee_angle is None:
+            return self._current_phase
 
-        # Set baseline from first 20 frames of standing
-        if self._knee_baseline is None and len(self._knee_history) >= 20:
-            self._knee_baseline = np.mean(self._knee_history[:20])
+        self._knee_buf.append(knee_angle)
+        if len(self._knee_buf) < self._direction_window + 2:
+            return self._current_phase
 
-        # Try model-based detection
-        probs = np.array(phase_probs, dtype=np.float64)
-        if abs(probs.sum() - 1.0) > 0.1:
-            exp_p = np.exp(probs - np.max(probs))
-            probs = exp_p / exp_p.sum()
+        # Smoothed current value and recent direction
+        smooth_now = np.mean(list(self._knee_buf)[-self._direction_window:])
+        smooth_prev = np.mean(list(self._knee_buf)[-(self._direction_window * 2):-self._direction_window])
+        delta = smooth_now - smooth_prev  # positive = straightening, negative = bending
 
-        max_prob = float(np.max(probs))
-        proposed_idx = int(np.argmax(probs))
-        proposed_model = self._PHASE_ORDER[proposed_idx]
+        # Update direction with hysteresis
+        if delta < -self._hysteresis:
+            self._direction = "down"  # knee bending
+        elif delta > self._hysteresis:
+            self._direction = "up"    # knee straightening
+        # else: keep previous direction (hysteresis deadband)
 
-        # Kinematic fallback from knee angle
-        proposed_kinematic = self._detect_from_knee_angle()
+        # Track local extremes
+        if smooth_now > self._local_max:
+            self._local_max = smooth_now
+        if smooth_now < self._local_min:
+            self._local_min = smooth_now
 
-        # Choose: model if confident, kinematic otherwise
-        if max_prob >= self._conf_threshold:
-            proposed = proposed_model
-        else:
-            proposed = proposed_kinematic
+        # Determine proposed phase
+        proposed = self._propose_phase(smooth_now)
 
-        # Apply state machine + debounce
+        # Apply transition rules + debounce
         if proposed != self._current_phase:
             if (
-                is_valid_transition(self._current_phase, proposed)
+                proposed in self._VALID.get(self._current_phase, set())
                 and self._frames_in_phase >= self._min_frames
             ):
                 self._current_phase = proposed
                 self._frames_in_phase = 0
 
-                # Reset rep tracking on new descent
+                # Reset tracking on phase changes
                 if proposed == Phase.DESCENT:
-                    self._rep_knee_min = 180.0
+                    self._local_min = smooth_now
                 elif proposed == Phase.TOP:
-                    self._rep_knee_min = 180.0
-
-        # Track minimum knee angle during rep
-        if knee_angle is not None and self._current_phase in (Phase.DESCENT, Phase.BOTTOM):
-            self._rep_knee_min = min(self._rep_knee_min, knee_angle)
+                    self._local_max = smooth_now
+                    self._local_min = 180.0
 
         return self._current_phase
 
-    def _detect_from_knee_angle(self) -> Phase:
-        """Fallback: detect phase from knee angle trajectory.
-
-        Standing knee ~160-175°. Squat bottom knee ~70-110°.
-        """
-        if self._knee_baseline is None or len(self._knee_history) < self._smoothing + 1:
-            return self._current_phase
-
-        # Smoothed current knee angle
-        current_knee = np.mean(self._knee_history[-self._smoothing:])
-        # Knee angle drop from baseline (positive = more bent)
-        drop = self._knee_baseline - current_knee
-
-        # Velocity: positive = bending more, negative = straightening
-        prev_knee = np.mean(self._knee_history[-(self._smoothing * 2):-self._smoothing]) \
-            if len(self._knee_history) >= self._smoothing * 2 else current_knee
-        velocity = prev_knee - current_knee  # positive = bending, negative = straightening
+    def _propose_phase(self, knee: float) -> Phase:
+        """Propose a phase based on knee angle and direction."""
 
         if self._current_phase == Phase.TOP:
-            # Start descent when knee drops significantly and is still going down
-            if drop > self._descent_threshold and velocity > 0.5:
+            # Start descent: knee bending and below standing threshold
+            if self._direction == "down" and knee < self._standing_angle:
                 return Phase.DESCENT
 
         elif self._current_phase == Phase.DESCENT:
-            # Bottom when knee stops going down (velocity near zero or reversing) while deep
-            if drop > self._bottom_threshold and velocity < 0.5:
+            # Bottom: knee stops going down (direction flips or stabilizes)
+            if knee < self._squat_angle and self._direction != "down":
                 return Phase.BOTTOM
+            # Also bottom if we've been descending and velocity slows way down
+            if knee < self._squat_angle:
+                recent = list(self._knee_buf)[-4:]
+                if len(recent) >= 4 and abs(recent[-1] - recent[0]) < 3.0:
+                    return Phase.BOTTOM
 
         elif self._current_phase == Phase.BOTTOM:
-            # Ascent when knee clearly straightening
-            recovery = current_knee - self._rep_knee_min
-            if recovery > self._ascent_recovery and velocity < -0.5:
+            # Ascent: knee starts straightening
+            if self._direction == "up" and knee > self._local_min + self._hysteresis * 2:
                 return Phase.ASCENT
 
         elif self._current_phase == Phase.ASCENT:
-            # Top when knee back near baseline
-            if drop < self._top_recovery:
+            # Top: knee back above standing threshold
+            if knee > self._standing_angle:
+                return Phase.TOP
+            # Also top if direction flips to stable/down near standing
+            if knee > self._standing_angle - 10 and self._direction != "up":
                 return Phase.TOP
 
         return self._current_phase
@@ -154,6 +166,7 @@ class PhaseDetector:
     def reset(self) -> None:
         self._current_phase = Phase.TOP
         self._frames_in_phase = 0
-        self._knee_history.clear()
-        self._knee_baseline = None
-        self._rep_knee_min = 180.0
+        self._knee_buf.clear()
+        self._direction = "stable"
+        self._local_max = 0.0
+        self._local_min = 180.0

@@ -29,6 +29,7 @@ class CalibrationResult:
     body_scale: float                   # torso length in meters
     dominant_side: str                  # "left" or "right"
     baseline_landmarks: NDArray[np.float64]  # averaged standing pose (33, 3)
+    baseline_knee_angle: float = 170.0  # standing knee angle in degrees
 
 
 class Calibrator:
@@ -65,10 +66,11 @@ class Calibrator:
         head_offset = self._compute_head_offset(avg_landmarks)
         body_scale = self._compute_body_scale(avg_landmarks)
         dominant_side = self._detect_dominant_side(avg_landmarks, view_type)
+        knee_angle = self._compute_knee_angle(avg_landmarks)
 
         logger.info(
-            "Calibration complete: view=%s, torso_angle=%.1f\u00b0, scale=%.3fm",
-            view_type.value, torso_angle, body_scale,
+            "Calibration complete: view=%s, torso=%.1f\u00b0, scale=%.3fm, knee=%.1f\u00b0",
+            view_type.value, torso_angle, body_scale, knee_angle,
         )
 
         return CalibrationResult(
@@ -78,6 +80,7 @@ class Calibrator:
             body_scale=body_scale,
             dominant_side=dominant_side,
             baseline_landmarks=avg_landmarks,
+            baseline_knee_angle=knee_angle,
         )
 
     def _detect_view(self, landmarks: NDArray[np.float64]) -> ViewType:
@@ -126,3 +129,13 @@ class Calibrator:
         left_z = landmarks[LEFT_SHOULDER][2]
         right_z = landmarks[RIGHT_SHOULDER][2]
         return "left" if left_z > right_z else "right"
+
+    def _compute_knee_angle(self, landmarks: NDArray[np.float64]) -> float:
+        """Average knee angle during standing (both knees)."""
+        from squat_coach.utils.math_utils import angle_at_joint
+        from squat_coach.pose.landmarks import (
+            LEFT_HIP, LEFT_KNEE, LEFT_ANKLE, RIGHT_HIP, RIGHT_KNEE, RIGHT_ANKLE,
+        )
+        left = angle_at_joint(landmarks[LEFT_HIP], landmarks[LEFT_KNEE], landmarks[LEFT_ANKLE])
+        right = angle_at_joint(landmarks[RIGHT_HIP], landmarks[RIGHT_KNEE], landmarks[RIGHT_ANKLE])
+        return (left + right) / 2.0

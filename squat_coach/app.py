@@ -180,7 +180,12 @@ class SquatCoachApp:
                             )
                             phase_detector = PhaseDetector(
                                 min_phase_duration_s=self._scoring_config["calibration"]["min_phase_duration_s"],
+                                calibrated_knee_angle=cal_result.baseline_knee_angle,
                             )
+                            logger.info("Phase detector: standing knee=%.1f°, descent<%.1f°, bottom<%.1f°",
+                                        cal_result.baseline_knee_angle,
+                                        phase_detector._standing_angle,
+                                        phase_detector._squat_angle)
                             rep_segmenter = RepSegmenter(
                                 min_rep_duration_s=self._scoring_config["calibration"]["min_rep_duration_s"],
                                 cooldown_s=self._scoring_config["calibration"]["rep_cooldown_s"],
@@ -232,13 +237,25 @@ class SquatCoachApp:
 
                 prev_phase = session.current_phase
                 session.current_phase = phase
+                if phase != prev_phase:
+                    logger.info("PHASE: %s -> %s (knee=%.1f°)",
+                                prev_phase.value, phase.value,
+                                features.get("primary_knee_angle", 0))
 
-                # Track per-rep extremes
+                # Track per-rep extremes and update live score estimate
                 if phase in (Phase.DESCENT, Phase.BOTTOM, Phase.ASCENT):
                     rep_min_knee = min(rep_min_knee, features.get("primary_knee_angle", 180))
                     rep_max_torso = max(rep_max_torso, features.get("torso_inclination_deg", 0))
                     rep_max_head_offset = max(rep_max_head_offset, features.get("head_to_trunk_offset", 0))
                     rep_features_snapshot = dict(features)
+
+                    # Live score estimate during rep (updates continuously)
+                    live_depth = compute_depth_score(rep_min_knee, ideal_ref.target_knee_angle if ideal_ref else 90)
+                    live_trunk = compute_trunk_control_score(
+                        features.get("trunk_stability", 0), rep_max_torso,
+                        ideal_ref.trunk_neutral_angle if ideal_ref else 10,
+                    )
+                    session.current_score = (live_depth + live_trunk) / 2.0
 
                 # Fault detection
                 fault_config = self._scoring_config.get("faults", {}).get("thresholds", {})
